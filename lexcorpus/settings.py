@@ -4,6 +4,7 @@ Agrupado por tema. Os valores de throttle/retry são o que protege o LexCorpus
 de ser bloqueado pelas bancas — ajuste por spider via custom_settings quando
 uma banca exigir tratamento especial.
 """
+import os
 
 BOT_NAME = "lexcorpus"
 SPIDER_MODULES = ["lexcorpus.spiders"]
@@ -29,9 +30,13 @@ RETRY_TIMES = 3
 RETRY_HTTP_CODES = [429, 500, 502, 503, 504, 408]
 
 # --- Storage dos binários (FilesPipeline) ------------------------------------
-# Raiz do storage. file:// hoje; troque por s3://... no futuro sem mexer no resto.
-FILES_STORE = "/data/raw/exams"
-# Esquema usado ao montar pasta_uri no evento (contrato §7).
+# Onde os PDFs são gravados fisicamente. Cada AMBIENTE define o seu:
+#   - dev local: aponte para o storage compartilhado do LexLearn, ex.:
+#       export LEXCORPUS_FILES_STORE="../LexLearn/LexLearn-v3/data/raw/exams"
+#   - Docker:    o volume é montado em /data/raw/exams (default abaixo).
+# O caminho NÃO é hardcodado: vem de LEXCORPUS_FILES_STORE, com fallback Docker.
+FILES_STORE = os.environ.get("LEXCORPUS_FILES_STORE", "/data/raw/exams")
+# Esquema usado ao montar pasta_uri no evento (contrato §7). file:// hoje.
 STORAGE_URI_SCHEME = "file://"
 # Expira o cache de download: não rebaixa o mesmo arquivo dentro de N dias.
 FILES_EXPIRES = 90

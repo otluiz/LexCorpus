@@ -27,6 +27,25 @@ mensagem estão em `schema/evento.schema.json` e `schema/sidecar.schema.json`.
 Em produção: `RABBIT_ENABLED=True` no settings (ou via -s), e o publisher
 emite no exchange `lexcorpus.events` com routing key `concurso.disponivel`.
 
+## Storage (onde os PDFs são gravados)
+
+O caminho físico vem da variável de ambiente `LEXCORPUS_FILES_STORE`, com
+fallback para `/data/raw/exams` (o ponto de montagem do volume no Docker).
+
+**Dev local** — LexCorpus e LexLearn são pastas irmãs em `~/Workspace/`, e o
+storage é o do LexLearn. Defina (caminho absoluto, funciona de qualquer pasta):
+
+    export LEXCORPUS_FILES_STORE="$HOME/Workspace/LexLearn/LexLearn-v3/data/raw/exams"
+
+    # depois é só rodar normalmente:
+    scrapy crawl pci -a url="https://..." -a banca="..." -a concurso="..." -a cargo="..."
+
+**Docker** — o volume compartilhado é montado em `/data/raw/exams`; não precisa
+definir nada (o default já aponta pra lá).
+
+O contrato (§7) mantém `pasta_uri` com esquema `file://` no evento, então o
+LexLearn resolve o ponteiro independentemente de onde o storage esteja montado.
+
 ## Um spider por banca
 
 Copie `spiders/exemplo_banca.py`, ajuste os seletores e a classificação de

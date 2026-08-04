@@ -1,0 +1,22 @@
+{
+  "idEvento": 1777,
+  "eventoNomeAbreviado": "PRF 2021",
+  "eventoNomeCompleto": "POLÍCIA RODOVIÁRIA FEDERAL",
+  "eventoURL": "PRF_21",
+  "eventoAno": 2021,
+  "eventoCargos": [{"idArea":"01","area":"Cargo 1: POLICIAL RODOVIÁRIO FEDERAL - Subsídio inicial de R$ 9.899,88."}],
+  "arquivosGabarito": [
+    {"tipoExtensaoArquivo":"_pdf","nomeArquivo":"578_PRF_001_01.PDF","descricaoArquivo":"PROVA OBJETIVA - ITENS DE 9 A 120","dataArquivoObj":"2021-05-31T10:50:00"},
+    {"tipoExtensaoArquivo":"_pdf","nomeArquivo":"GAB_DEFINITIVO_578_PRF_001_01.PDF","descricaoArquivo":"GABARITO DEFINITIVO - ITENS DE 9 A 120","dataArquivoObj":"2021-05-31T10:50:00"},
+    {"tipoExtensaoArquivo":"_pdf","nomeArquivo":"578_PRF_ING_01.PDF","descricaoArquivo":"PROVA OBJETIVA - ITENS DE 1 A 8 - LÍNGUA INGLESA","dataArquivoObj":"2021-05-31T10:50:00"},
+    {"tipoExtensaoArquivo":"_pdf","nomeArquivo":"GAB_DEFINITIVO_578_PRF_ING_01.PDF","descricaoArquivo":"GABARITO DEFINITIVO - ITENS DE 1 A 8 - LÍNGUA INGLESA","dataArquivoObj":"2021-05-31T10:50:00"},
+    {"tipoExtensaoArquivo":"_pdf","nomeArquivo":"PRF_21_PROVA_DISCURSIVA.PDF","descricaoArquivo":"PROVA DISCURSIVA","dataArquivoObj":"2021-05-11T19:00:00"},
+    {"tipoExtensaoArquivo":"_pdf","nomeArquivo":"PRF_21_PADRAO_DE_RESPOSTA_DEFINITIVO.PDF","descricaoArquivo":"PADRÃO DE RESPOSTA DEFINITIVO - PROVA DISCURSIVA","dataArquivoObj":"2021-05-28T10:00:00"},
+    {"tipoExtensaoArquivo":"_pdf","nomeArquivo":"GAB_PRELIMINAR_632_PRF_001_01.PDF","descricaoArquivo":"GABARITO PRELIMINAR - 1.ª PROVA OBJETIVA - CURSO DE FORMAÇÃO","dataArquivoObj":"2021-11-14T21:00:00"},
+    {"tipoExtensaoArquivo":"_pdf","nomeArquivo":"632_PRF_CF_001_01.PDF","descricaoArquivo":"1.ª PROVA OBJETIVA - CURSO DE FORMAÇÃO","dataArquivoObj":"2021-11-14T21:00:00"}
+  ],
+  "arquivosEdital": [
+    {"tipoExtensaoArquivo":"_pdf","nomeArquivo":"ED_1_PRF_2021_ABERTURA.PDF","descricaoArquivo":"Edital nº 1 - Abertura","dataArquivoObj":"2021-01-18T18:18:00"},
+    {"tipoExtensaoArquivo":"_mp4","nomeArquivo":"Impulsao.mp4","descricaoArquivo":"Exame de aptidão física","dataArquivoObj":"2021-06-17T09:15:00"}
+  ]
+}
