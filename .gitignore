@@ -1,13 +1,15 @@
-# 🔒 LexCorpus .gitignore - Versão 0.1
-# Combina o que já tem + o que está faltando
+# LexCorpus .gitignore — v0.2
+# Governa o que entra no REPOSITÓRIO (código-fonte).
+# NÃO confundir com o CONTRATO §2, que governa onde o LexCorpus ESCREVE em runtime
+# (/data/raw/exams/...). Os PDFs coletados são dados no storage compartilhado —
+# vivem no SSD, não no Git. Ignorá-los aqui não afeta em nada o caminho de escrita.
 
 # ============================================
-# 🐍 Python (Adicionado - Importante!)
+# Python
 # ============================================
 __pycache__/
 *.pyc
 *.log
-
 *.py[cod]
 *$py.class
 *.so
@@ -20,7 +22,6 @@ eggs/
 .eggs/
 *.egg-info/
 *.egg
-
 lib/
 lib64/
 parts/
@@ -29,12 +30,10 @@ var/
 wheels/
 pip-wheel-metadata/
 share/python-wheels/
-*.egg-info/
 .installed.cfg
-*.egg
 MANIFEST
 
-# Virtual environments (CRÍTICO - venv/)
+# Virtual environments
 venv/
 ENV/
 env/
@@ -42,17 +41,19 @@ env/
 env.bak/
 venv.bak/
 
-# Poetry
+# Poetry / Pipenv locks (projeto usa requirements.txt)
 poetry.lock
+Pipfile.lock
 
 # ============================================
-# 📝 IDE e Editores (Seu arquivo tem isto)
+# Scrapy
+# ============================================
+.scrapy/
+
+# ============================================
+# IDE e Editores
 # ============================================
 .vscode/
-
-# ============================================
-# 📝 IDE e Editores (Adicionado)
-# ============================================
 .idea/
 *.swp
 *.swo
@@ -66,66 +67,52 @@ poetry.lock
 *.iml
 .classpath
 
-# ============================================
-# 📊 Dados e Logs (Adicionado)
-# ============================================
-logs/
-*.log.*
-*.sql
-*.db
-*.sqlite
-*.sqlite3
+# Emacs autosaves e temporários
+\#*\#
+.\#*
 
 # ============================================
-# 🧪 Testes (Adicionado)
+# Testes
 # ============================================
 .pytest_cache/
 .coverage
 htmlcov/
 .tox/
 .hypothesis/
+.mypy_cache/
+.dmypy.json
+dmypy.json
 
 # ============================================
-# 📦 Node.js (Adicionado)
+# Node.js / Frontend (caso surja um frontend)
 # ============================================
 npm-debug.log
 yarn-error.log
+yarn.lock
 .next/
-dist/
-build/
 node_modules/
-
-# ============================================
-# 🎨 Frontend (Adicionado)
-# ============================================
 .cache/
 .parcel-cache
 .parcel-cache/
 
 # ============================================
-# 🔧 Arquivos Temporários (Adicionado)
+# Arquivos temporários e de sistema
 # ============================================
 *.tmp
 *.temp
 *.bak
-*.swp
-*~
 .~*
 Thumbs.db
-
-# ============================================
-# 🗂️ Arquivos do Sistema (Adicionado)
-# ============================================
+ehthumbs.db
+Desktop.ini
 .AppleDouble
 .LSOverride
 ._*
 .Spotlight-V100
 .Trashes
-ehthumbs.db
-Desktop.ini
 
 # ============================================
-# 🔐 Segurança (Adicionado)
+# Segurança (NUNCA versionar credenciais)
 # ============================================
 *.key
 *.pem
@@ -134,77 +121,69 @@ Desktop.ini
 secrets/
 .ssh/
 credentials.json
+.env
+.env.*
 
 # ============================================
-# 💾 Cache (Adicionado)
-# ============================================
-.cache/
-*.cache
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# ============================================
-# 📱 Arquivos de Lock (Adicionado)
-# ============================================
-Pipfile.lock
-poetry.lock
-yarn.lock
-
-# ============================================
-# 🎯 Arquivos de Configuração Local (Adicionado)
+# Config local
 # ============================================
 .local/
 .config/
 config.local.yml
 config.local.yaml
-
-# ===========================================
-# Ignorar todos os HTMLs...
-# ...EXCETO o index.html da pasta frontend
-# ===========================================
-*.html
-
-# ===========================================
-# Ignorar todos os backup de dados...
-# ===========================================
-# backups locais
-backups/
-*.backup
-*.dump
-
-# dumps de banco
-*.dump
-*.sql
-.ipynb_checkpoints/
 terraform.tfvars
 
-# Dados (não versionar no git)
+# ============================================
+# HTML
+# ============================================
+# Ignora todos os HTMLs (ex.: contratos renderizados vivem em legado/, já ignorada).
+# Se um dia precisar versionar um HTML específico (ex.: frontend/index.html),
+# adicione uma exceção logo abaixo:  !frontend/index.html
+*.html
+
+# ============================================
+# Notebooks
+# ============================================
+.ipynb_checkpoints/
+
+# ============================================
+# Dados — NÃO versionar (são dados, não código)
+# ============================================
 *.pdf
 *.txt
 *.csv
-
-# Permitir exemplos (opcional)
-!data/.gitkeep
-!data/raw/.gitkeep
-!data/processed/.gitkeep
-
-# Arquivos de teste e backup
-*.tar.gz
+*.sql
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+logs/
+*.log.*
+backups/
 *.backup
 *.back
 *.old
 *.pre-*-backup
 
-# Diretórios que não vão pro git
+# EXCEÇÃO: requirements.txt é código de projeto, não dado.
+!requirements.txt
+
+# ============================================
+# Storage compartilhado — fora do Git
+# ============================================
+# /data/ é o storage compartilhado com o LexLearn (volume Docker), provisionado
+# pela infra. O LexCorpus escreve em /data/raw/exams/ em runtime (CONTRATO §2),
+# mas o conteúdo NÃO é versionado. Barra inicial = só o data/ da raiz do projeto
+# (um tests/fixtures/data/ eventual continua versionável).
+/data/
+
+# ============================================
+# Empacotamento e diretórios fora do versionamento
+# ============================================
+*.tar.gz
 imagens/
 legacy/
 legado/
-
-# Emacs autosaves e temporários
-\#*\#
-.\#*
-*~
 
 # PDFs grandes em docs (usar link externo)
 docs/**/*.pdf
