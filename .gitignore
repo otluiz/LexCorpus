@@ -1,0 +1,210 @@
+# 🔒 LexCorpus .gitignore - Versão 0.1
+# Combina o que já tem + o que está faltando
+
+# ============================================
+# 🐍 Python (Adicionado - Importante!)
+# ============================================
+__pycache__/
+*.pyc
+*.log
+
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+*.egg-info/
+*.egg
+
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments (CRÍTICO - venv/)
+venv/
+ENV/
+env/
+.venv
+env.bak/
+venv.bak/
+
+# Poetry
+poetry.lock
+
+# ============================================
+# 📝 IDE e Editores (Seu arquivo tem isto)
+# ============================================
+.vscode/
+
+# ============================================
+# 📝 IDE e Editores (Adicionado)
+# ============================================
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+.project
+.pydevproject
+.settings/
+*.iml
+.classpath
+
+# ============================================
+# 📊 Dados e Logs (Adicionado)
+# ============================================
+logs/
+*.log.*
+*.sql
+*.db
+*.sqlite
+*.sqlite3
+
+# ============================================
+# 🧪 Testes (Adicionado)
+# ============================================
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# ============================================
+# 📦 Node.js (Adicionado)
+# ============================================
+npm-debug.log
+yarn-error.log
+.next/
+dist/
+build/
+node_modules/
+
+# ============================================
+# 🎨 Frontend (Adicionado)
+# ============================================
+.cache/
+.parcel-cache
+.parcel-cache/
+
+# ============================================
+# 🔧 Arquivos Temporários (Adicionado)
+# ============================================
+*.tmp
+*.temp
+*.bak
+*.swp
+*~
+.~*
+Thumbs.db
+
+# ============================================
+# 🗂️ Arquivos do Sistema (Adicionado)
+# ============================================
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Desktop.ini
+
+# ============================================
+# 🔐 Segurança (Adicionado)
+# ============================================
+*.key
+*.pem
+*.p12
+*.pfx
+secrets/
+.ssh/
+credentials.json
+
+# ============================================
+# 💾 Cache (Adicionado)
+# ============================================
+.cache/
+*.cache
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# ============================================
+# 📱 Arquivos de Lock (Adicionado)
+# ============================================
+Pipfile.lock
+poetry.lock
+yarn.lock
+
+# ============================================
+# 🎯 Arquivos de Configuração Local (Adicionado)
+# ============================================
+.local/
+.config/
+config.local.yml
+config.local.yaml
+
+# ===========================================
+# Ignorar todos os HTMLs...
+# ...EXCETO o index.html da pasta frontend
+# ===========================================
+*.html
+
+# ===========================================
+# Ignorar todos os backup de dados...
+# ===========================================
+# backups locais
+backups/
+*.backup
+*.dump
+
+# dumps de banco
+*.dump
+*.sql
+.ipynb_checkpoints/
+terraform.tfvars
+
+# Dados (não versionar no git)
+*.pdf
+*.txt
+*.csv
+
+# Permitir exemplos (opcional)
+!data/.gitkeep
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# Arquivos de teste e backup
+*.tar.gz
+*.backup
+*.back
+*.old
+*.pre-*-backup
+
+# Diretórios que não vão pro git
+imagens/
+legacy/
+legado/
+
+# Emacs autosaves e temporários
+\#*\#
+.\#*
+*~
+
+# PDFs grandes em docs (usar link externo)
+docs/**/*.pdf

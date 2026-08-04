@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lexlearn/lexcorpus/evento.schema.json",
+  "title": "Evento LexCorpus (concurso.disponivel / concurso.atualizado) - v2",
+  "description": "Mensagem publicada pelo LexCorpus no exchange lexcorpus.events. Um evento por concurso. v2.0: cargos como lista, tipo_prova, multi_cargo, ciclo de vida do gabarito.",
+  "type": "object",
+  "required": ["schema_version", "event", "event_id", "produced_at", "banca", "concurso", "pasta_uri", "arquivos"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "2.0"
+    },
+    "event": {
+      "type": "string",
+      "enum": ["concurso.disponivel", "concurso.atualizado"]
+    },
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "UUID unico por evento. Idempotencia. Nunca reutilizar."
+    },
+    "produced_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 UTC."
+    },
+    "banca": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Slug da banca (minusculas, sem acento, underscore)."
+    },
+    "concurso": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Slug do concurso = nome da pasta."
+    },
+    "pasta_uri": {
+      "type": "string",
+      "pattern": "^(file|s3)://",
+      "description": "URI COM esquema apontando para a pasta plana do concurso."
+    },
+    "fonte_url": {
+      "type": "string",
+      "format": "uri"
+    },
+    "arquivos": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Lista PLANA de todos os arquivos do concurso. A estrutura (cargo/tipo/ciclo) vive no metadado de cada item, NAO em subpastas.",
+      "items": {
+        "type": "object",
+        "required": ["nome", "papel", "cargos", "checksum_sha256", "tamanho_bytes"],
+        "additionalProperties": false,
+        "properties": {
+          "nome": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[^/]+$",
+            "description": "Basename do arquivo, relativo a pasta_uri. Nome original preservado. Barra proibida (pasta plana; sem subpasta; anti path-traversal)."
+          },
+          "papel": {
+            "type": "string",
+            "enum": ["prova", "gabarito_preliminar", "gabarito_definitivo"],
+            "description": "Declarado pelo LexCorpus."
+          },
+          "cargos": {
+            "type": "array",
+            "minItems": 1,
+            "description": "Cargo(s) que este arquivo cobre. Um cargo -> lista de 1. Gabarito multi-cargo -> lista de varios. Use ['*'] para 'todos os cargos' quando a banca nao discrimina.",
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "tipo_prova": {
+            "type": ["string", "null"],
+            "description": "Versao/tipo da prova quando a banca embaralha (ex: '1','2','amarela'). null quando nao ha tipos."
+          },
+          "multi_cargo": {
+            "type": "boolean",
+            "default": false,
+            "description": "true quando UM arquivo contem varios cargos subdivididos internamente (ex: gab_definitivo_todos_cargos). Nesse caso 'cargos' lista todos e 'segmentos' pode detalhar onde cada um esta."
+          },
+          "segmentos": {
+            "type": "array",
+            "description": "OPCIONAL. Para arquivos multi_cargo: onde cada cargo aparece dentro do arquivo. O LexCorpus declara o que conseguir extrair; se nao souber, omite e o LexLearn desmembra.",
+            "items": {
+              "type": "object",
+              "required": ["cargo"],
+              "additionalProperties": false,
+              "properties": {
+                "cargo": { "type": "string", "minLength": 1 },
+                "pagina_inicio": { "type": "integer", "minimum": 1 },
+                "pagina_fim": { "type": "integer", "minimum": 1 },
+                "ancora": {
+                  "type": "string",
+                  "description": "Texto/titulo que marca o inicio da secao do cargo (alternativa a pagina)."
+                }
+              }
+            }
+          },
+          "vigente": {
+            "type": "boolean",
+            "default": true,
+            "description": "Ciclo de vida do gabarito. gabarito_definitivo -> true. gabarito_preliminar -> false quando ja existe o definitivo (arquivado como historico). Prova -> sempre true."
+          },
+          "substituido_por": {
+            "type": ["string", "null"],
+            "description": "OPCIONAL. Para um preliminar arquivado: nome do arquivo definitivo que o substituiu. Documenta a transicao preliminar->definitivo."
+          },
+          "checksum_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "tamanho_bytes": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "extra": {
+      "type": "object",
+      "description": "Metadados livres. O LexLearn ignora o que nao conhecer.",
+      "properties": {
+        "rotulos": {
+          "type": "object",
+          "description": "Rotulos crus (como vieram da fonte) para cada valor slugificado. Recomendado: preserva a informacao original sem poluir os campos canonicos.",
+          "additionalProperties": false,
+          "properties": {
+            "banca": { "type": "string", "description": "Rotulo cru da banca. Ex: 'FGV'." },
+            "concurso": { "type": "string", "description": "Rotulo cru do concurso. Ex: 'IF-Sergipe 2024 - Professor EBTT'." },
+            "cargos": {
+              "type": "object",
+              "description": "Mapa slug->rotulo cru. Cada chave e um slug que aparece nas listas 'cargos' dos arquivos.",
+              "additionalProperties": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lexlearn/lexcorpus/sidecar.schema.json",
+  "title": "Sidecar de metadado de origem (.meta.json) - v2",
+  "description": "Escrito pelo LexCorpus ao lado de cada PDF. Tratado pelo LexLearn como entrada NAO-CONFIAVEL: validado antes de qualquer uso. v2.0 alinhado ao evento v2.",
+  "type": "object",
+  "required": ["schema_version", "arquivo", "papel", "cargos", "checksum_sha256", "origem"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "const": "2.0" },
+    "arquivo": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^/]+$",
+      "description": "Basename do PDF ao qual este sidecar se refere (mesma pasta). Barra proibida (pasta plana; anti path-traversal)."
+    },
+    "papel": {
+      "type": "string",
+      "enum": ["prova", "gabarito_preliminar", "gabarito_definitivo"]
+    },
+    "cargos": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Cargo(s) cobertos. ['*'] para todos."
+    },
+    "tipo_prova": {
+      "type": ["string", "null"],
+      "description": "Versao/tipo da prova. null se nao ha tipos."
+    },
+    "multi_cargo": {
+      "type": "boolean",
+      "default": false
+    },
+    "segmentos": {
+      "type": "array",
+      "description": "Para multi_cargo: onde cada cargo esta no arquivo. Declarar o que for extraivel.",
+      "items": {
+        "type": "object",
+        "required": ["cargo"],
+        "additionalProperties": false,
+        "properties": {
+          "cargo": { "type": "string", "minLength": 1 },
+          "pagina_inicio": { "type": "integer", "minimum": 1 },
+          "pagina_fim": { "type": "integer", "minimum": 1 },
+          "ancora": { "type": "string" }
+        }
+      }
+    },
+    "vigente": {
+      "type": "boolean",
+      "default": true,
+      "description": "false para preliminar ja substituido por definitivo."
+    },
+    "substituido_por": {
+      "type": ["string", "null"],
+      "description": "Nome do definitivo que substituiu este preliminar."
+    },
+    "checksum_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "banca": { "type": "string", "description": "Slug da banca (mesmo formato do evento: minusculas, sem acento, underscore)." },
+    "concurso": { "type": "string", "description": "Slug do concurso (mesmo formato do evento)." },
+    "rotulos": {
+      "type": "object",
+      "description": "Rotulos crus (como vieram da fonte) dos valores slugificados deste arquivo.",
+      "additionalProperties": false,
+      "properties": {
+        "banca": { "type": "string" },
+        "concurso": { "type": "string" },
+        "cargos": {
+          "type": "object",
+          "description": "Mapa slug->rotulo cru para os cargos deste arquivo.",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "origem": {
+      "type": "object",
+      "required": ["fonte_url", "raspado_em"],
+      "additionalProperties": true,
+      "properties": {
+        "fonte_url": { "type": "string", "format": "uri" },
+        "raspado_em": { "type": "string", "format": "date-time" },
+        "scraper_versao": { "type": "string" }
+      }
+    },
+    "extra": { "type": "object" }
+  }
+}
