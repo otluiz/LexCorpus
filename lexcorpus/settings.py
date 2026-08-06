@@ -42,8 +42,10 @@ STORAGE_URI_SCHEME = "file://"
 FILES_EXPIRES = 90
 
 # --- RabbitMQ ----------------------------------------------------------------
-RABBIT_ENABLED = False                   # True em produção; False grava evento em disco
-RABBIT_URL = "amqp://guest:guest@localhost:5672/"
+#RABBIT_ENABLED = True                   # True em produção; False grava evento em disco
+#RABBIT_URL = "amqp://guest:guest@localhost:5672/"
+RABBIT_ENABLED = os.environ.get("RABBIT_ENABLED", "").lower() in ("1", "true", "yes")
+RABBIT_URL = os.environ.get("RABBIT_URL", "amqp://guest:guest@localhost:5672/")
 RABBIT_EXCHANGE = "lexcorpus.events"
 RABBIT_ROUTING_DISPONIVEL = "concurso.disponivel"
 RABBIT_ROUTING_ATUALIZADO = "concurso.atualizado"

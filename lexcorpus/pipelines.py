@@ -14,6 +14,7 @@ Princípios do contrato honrados aqui:
 """
 from __future__ import annotations
 
+import os
 import json
 import uuid
 from datetime import datetime, timezone
@@ -186,7 +187,8 @@ class EventoRabbitPipeline:
             self._conn.close()
 
     def _build_evento(self, dados):
-        pasta_uri = f"{self.uri_scheme}{Path(self.files_store).resolve()}/{dados['banca']}/{dados['concurso']}/"
+       # pasta_uri = f"{self.uri_scheme}{Path(self.files_store).resolve()}/{dados['banca']}/{dados['concurso']}/"
+        pasta_uri = f"{self.uri_scheme}{os.path.abspath(self.files_store)}/{dados['banca']}/{dados['concurso']}/"
         rot = {}
         if dados["rotulos"].get("banca"):
             rot["banca"] = dados["rotulos"]["banca"]

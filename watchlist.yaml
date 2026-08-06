@@ -1,0 +1,61 @@
+# watchlist.yaml — alvos de coleta do LexCorpus
+#
+# O scheduler (lexcorpus/scheduler.py — ver BACKLOG) lê este arquivo e
+# dispara `scrapy crawl <spider>` com os params de cada alvo cujo cron
+# venceu. Versionado no repo: adicionar um concurso = commit de uma linha.
+#
+# Convenções:
+#   banca   — slug canônico (minúsculas, sem acento) — chave do storage
+#   spider  — nome do spider Scrapy (scrapy crawl <spider>)
+#   params  — repassados como -a chave=valor ao spider
+#   cron    — quando coletar (horário local do container; defina TZ)
+#   ativo   — false = pausado OU spider ainda não implementado
+#
+# Frequência sugerida: enquanto o ciclo preliminar→definitivo está aberto
+# (semanas após a prova), coletar 2–4x/dia; depois de definitivo, 1x/dia
+# basta. O StateStore garante que re-run sem novidade não publica evento.
+
+version: 1
+
+alvos:
+  # --- CEBRASPE (API oficial) — spider pronto, pode ativar já -----------
+  - banca: cebraspe
+    spider: cebraspe
+    params: {slug: prf_21}
+    cron: "0 6 * * *"          # 1x/dia — ciclo encerrado
+    ativo: true
+
+  # --- FGV — spider em construção (BACKLOG [#A]) ------------------------
+  - banca: fgv
+    spider: fgv
+    params: {slug: dataprev26}
+    cron: "0 */6 * * *"        # 4x/dia — ciclo preliminar→definitivo aberto
+    ativo: false               # ativar quando spiders/fgv.py existir
+
+  # --- FCC — spider em construção (BACKLOG [#A]) ------------------------
+  - banca: fcc
+    spider: fcc
+    params: {codigo: dpeba125}
+    cron: "0 6,18 * * *"       # 2x/dia
+    ativo: false               # ativar quando spiders/fcc.py existir
+
+  # --- CESGRANRIO — bloqueado (WAF; precisa imagem Playwright) ----------
+  # - banca: cesgranrio
+  #   spider: cesgranrio
+  #   params: {slug: "..."}
+  #   cron: "0 6,18 * * *"
+  #   ativo: false
+
+# Spiders de descoberta: percorrem SÓ listagens (sem baixar PDF) e propõem
+# novos alvos. Saída em eventos_debug/descoberta/; promoção ao watchlist
+# é manual por enquanto (revisar antes de ativar).
+descoberta:
+  - spider: pci_descoberta     # PCI como índice — nunca como fonte de PDF
+    cron: "0 5 * * *"          # ADR-0001: Turnstile + robots.txt /*.pdf
+    ativo: false
+  - spider: fgv_listagem
+    cron: "5 5 * * *"
+    ativo: false
+  - spider: fcc_listagem
+    cron: "10 5 * * *"
+    ativo: false
