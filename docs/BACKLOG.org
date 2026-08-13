@@ -241,18 +241,21 @@
          default local inalterado (False / localhost)
    - [ ] Credenciais de produção fora do repo (.env + .env.example)
 
-** TODO [#A] BUG: "Gabarito Oficial Preliminar" vira gabarito_definitivo
+** FEITO [#A] BUG: "Gabarito Oficial Preliminar" vira gabarito_definitivo
+   CLOSED: 2026-08-13
    Reproduzido em 09/08: RE_GAB_DEF inclui "oficial" como qualificador
    de definitivo, então "Gabarito Oficial Preliminar" (rótulo padrão da
    FGV) casa RE_GAB_DEF antes de RE_GAB_PRE. Afeta heuristics.py →
    base.py delega nela (desde 09/08), então estrategia.py e
    agregador_generico.py herdam o erro. fgv.py NÃO é afetado (regex
    locais estritas: gabarito\s+oficial\s+definitiv / \s+preliminar).
-   - [ ] Corrigir a precedência EM heuristics.py (cópia única desde o
+   - [X] Corrigir a precedência EM heuristics.py (cópia única desde o
          alinhamento da base): checar RE_GAB_PRE ANTES de RE_GAB_DEF,
          ou remover "oficial" dos qualificadores de definitivo (um
          gabarito "oficial" pode ser preliminar OU definitivo)
-   - [ ] Casos de teste: "Gabarito Oficial Preliminar" → preliminar;
+         FEITO 13/08: as duas proteções foram aplicadas — RE_GAB_PRE
+         roda antes de RE_GAB_DEF e "oficial" saiu de RE_GAB_DEF.
+   - [X] Casos de teste: "Gabarito Oficial Preliminar" → preliminar;
          "Gabarito Oficial Definitivo" → definitivo; "Gabarito" (sem
          qualificador) → definitivo (regra vigente)
 

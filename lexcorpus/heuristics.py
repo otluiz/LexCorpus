@@ -29,7 +29,7 @@ import re
 
 # --- Heurísticas de classificação (defaults gerais) ---------------------------
 
-RE_GAB_DEF = re.compile(r"gabarito.*(definitiv|final|oficial|p[óo]s.?recurs)", re.I)
+RE_GAB_DEF = re.compile(r"gabarito.*(definitiv|final|p[óo]s.?recurs)", re.I)
 RE_GAB_PRE = re.compile(r"gabarito.*(preliminar|provis[óo]ri)", re.I)
 RE_GAB = re.compile(r"gabarito|gab[\W_]", re.I)
 RE_PROVA = re.compile(r"prova|caderno|padr[ãa]o\s+de\s+resposta", re.I)
@@ -92,10 +92,10 @@ def classificar_papel(
     if not eh_relevante(texto, url, re_descartar=re_descartar):
         return None
 
-    if gab_def.search(alvo):
-        return "gabarito_definitivo"
     if gab_pre.search(alvo):
         return "gabarito_preliminar"
+    if gab_def.search(alvo):
+        return "gabarito_definitivo"
     if gab.search(alvo):
         return "gabarito_definitivo"
     if prova.search(alvo):

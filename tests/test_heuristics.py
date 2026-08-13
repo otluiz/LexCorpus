@@ -2,9 +2,8 @@
 # Função:   testes unitários de lexcorpus/heuristics.py — funções puras,
 #           sem instanciar spiders (ADR-0004). Golden cases de classificação
 #           de papel + regimes de descarte fraco (default) e forte (override).
-#           O bug do "oficial" (backlog, [#A]) está marcado como xfail
-#           estrito: ao corrigir o módulo, o XPASS quebra o teste e lembra
-#           de remover o marcador.
+#           Inclui o caso FGV "Gabarito Oficial Preliminar", que não pode
+#           ser tratado como definitivo só por conter "oficial".
 """Rodar:  pytest tests/test_heuristics.py -v"""
 import re
 
@@ -33,11 +32,9 @@ def test_classificar_papel_defaults(texto, url, esperado):
     assert h.classificar_papel(texto, url) == esperado
 
 
-# --- bug conhecido [#A]: "oficial" contamina RE_GAB_DEF ----------------------
+# --- regressão [#A]: "oficial" não implica gabarito definitivo ----------------
 # Rótulo padrão FGV: TODO gabarito é "Oficial" (preliminar e definitivo).
-# Hoje RE_GAB_DEF casa "oficial" antes de RE_GAB_PRE rodar.
 
-@pytest.mark.xfail(strict=True, reason="BUG [#A] backlog: RE_GAB_DEF casa 'oficial' — corrigir precedência no módulo")
 def test_gabarito_oficial_preliminar_nao_eh_definitivo():
     assert h.classificar_papel(
         "Gabarito Oficial Preliminar da Prova Objetiva", "https://x/gab.pdf"
