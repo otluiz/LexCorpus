@@ -11,13 +11,39 @@ mensagem estão em `schema/evento.schema.json` e `schema/sidecar.schema.json`.
 
     lexcorpus/
       items.py        ArquivoItem — um PDF + seu metadado (espelha o contrato)
+      heuristics.py   classificação de papel (prova/gabarito) em funções
+                      puras — fonte da verdade (ADR-0004)
       pipelines.py    download (FilesPipeline) -> sidecar -> evento RabbitMQ
       settings.py     throttle, retry, storage, cadeia de pipelines
       util.py         slugify, checksum SHA-256, escrita atômica
       spiders/
-        exemplo_banca.py   modelo de um spider por banca
+        base.py              LexCorpusSpider — make_item (fábrica do
+                             ArquivoItem do contrato v2.0)
+        exemplo_banca.py     modelo de um spider por banca
+        cebraspe.py          API oficial de eventos + CDN
+        fcc.py               gabaritos oficiais (cadernos não são públicos)
+        fgv.py               conhecimento.fgv.br (inclui o CNU)
+        pci.py               PCI Concursos — modo teste (ADR-0001: PCI é
+                             índice de descoberta, não fonte de PDFs)
+        estrategia.py        blog do Estratégia Concursos (em validação)
+        agregador_generico.py spider parametrizável por -a (em validação)
     schema/           os JSON Schemas do contrato v2.0
     tests/            validação do esqueleto contra os schemas
+    docs/             CONTRATO.md, BACKLOG.org, comunicados e ADRs
+                      (docs/architecture/decisions/)
+    watchlist.yaml    alvos de coleta (automação — ver backlog)
+
+## Bancas e fontes — status
+
+| Fonte      | Spider               | Status                                   |
+|------------|----------------------|------------------------------------------|
+| CEBRASPE   | `cebraspe`           | ✅ funcional (API oficial)                |
+| FCC        | `fcc`                | ✅ gabaritos oficiais (provas via PCI)    |
+| FGV        | `fgv`                | 🚧 em construção (CNU 2025 ensaiado)      |
+| PCI        | `pci`                | 🔎 descoberta apenas (ADR-0001)           |
+| Estratégia | `estrategia`         | 🧪 código pronto, validação em andamento  |
+| Agregadores| `agregador_generico` | 🧪 código pronto, validação em andamento  |
+| Cesgranrio | —                    | ⛔ bloqueada (WAF/Azure Front Door)       |
 
 ## Rodar (modo dev, sem RabbitMQ)
 
@@ -51,3 +77,17 @@ LexLearn resolve o ponteiro independentemente de onde o storage esteja montado.
 Copie `spiders/exemplo_banca.py`, ajuste os seletores e a classificação de
 papel/cargos/tipo_prova. Não implemente download, checksum, sidecar ou evento
 no spider — isso é dos pipelines.
+
+Classificação de papel (prova/gabarito): importe `lexcorpus/heuristics.py`
+(funções puras, override por parâmetro nomeado — ADR-0004) ou herde
+`spiders/base.py` (`LexCorpusSpider`) pelo `make_item`. Não copie regex para
+dentro do spider.
+
+## Por onde começar
+
+1. `docs/CONTRATO.md` — o acordo com o LexLearn (v2.0)
+2. `docs/BACKLOG.org` — estado das tarefas e decisões recentes
+3. `docs/architecture/decisions/` — ADRs (ADR-0004 heurísticas,
+   ADR-0005 migração dos spiders antigos; ADR-0001/0002 pendentes — ver
+   backlog)
+4. `schema/` — os JSON Schemas do contrato

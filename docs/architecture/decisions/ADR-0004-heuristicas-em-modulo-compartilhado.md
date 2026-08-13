@@ -90,3 +90,33 @@ classificação vive na base.
 - `fgv.py`: nasce importando `heuristics` (ou herdando a base fina).
 - `pci.py`: migração junto com a revisão do descarte fraco (item "Falso
   positivo" do backlog).
+
+## Atualização (2026-08-09) — situação real da implementação
+
+Revisão do código no commit `5348271` mostrou que a implementação
+diverge desta decisão em quatro pontos:
+
+1. **`base.py` não delega — duplica.** A base fina prevista ("nenhuma
+   lógica de classificação vive na base") não se concretizou: a classe
+   tem suas próprias regex e lógica, cópia do regime FRACO. Consequência
+   prática: override de classe `RE_DESCARTAR` tem semântica fraca,
+   enquanto o parâmetro `re_descartar` do módulo é forte — o mesmo
+   override se comporta diferente conforme o ponto de importação.
+2. **`fgv.py` nasceu com cópias locais** (`_RE_GAB_*`, `eh_relevante`),
+   sem importar o módulo nem herdar a base, e monta o `ArquivoItem`
+   manualmente. As regex locais são mais estritas e estão corretas para
+   o padrão FGV — devem virar parâmetros nomeados na migração, não ser
+   descartadas.
+3. **`cebraspe.py` não foi refatorado** ao contrário do registrado acima
+   ("já ajustados"): segue com `classificar_papel` local e sem
+   `make_item`. (Há argumento para exceção: a classificação dele vem da
+   `descricaoArquivo` da API — fonte estruturada, não heurística.)
+4. **Bug no módulo e na base:** `RE_GAB_DEF` inclui "oficial" como
+   qualificador, então "Gabarito Oficial Preliminar" (rótulo padrão da
+   FGV) é classificado como `gabarito_definitivo`. Reproduzido em teste
+   direto das funções em 09/08.
+
+A **decisão permanece** (módulo de funções puras + base fina que
+delega). Os itens de convergência estão no backlog: "Alinhar base.py
+com o ADR-0004", "BUG: Gabarito Oficial Preliminar" e "Migrar pci.py e
+fcc.py para heuristics.py".

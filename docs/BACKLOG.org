@@ -38,13 +38,15 @@
     os GABARITOS oficiais (saem como editais públicos ao fim do certame).
     robots.txt da FCC bloqueia /concursos/ e *.pdf → crawls rodam com
     -s ROBOTSTXT_OBEY=False (decisão assumida, ver docstring do spider).
-  - HEURÍSTICAS EM CLASSE BASE (07/08): o plano original era um módulo
-    lexcorpus/heuristics.py; a implementação foi por CLASSE BASE —
-    spiders/base.py (LexCorpusSpider) centraliza as regex de papel
-    (prova/gabarito), o descarte de irrelevantes e a fábrica make_item().
-    Spiders novos herdam dela; override por banca = sobrescrever o regex
-    de classe (ex.: RE_DESCARTAR forte da FCC). cebraspe.py já migrado.
-    Registrar na escrita dos ADRs (item ADRs iniciais).
+  - HEURÍSTICAS EM MÓDULO (ADR-0004, 07/08): a decisão é o módulo de
+    funções puras lexcorpus/heuristics.py + base fina que só DELEGA
+    (make_item + repasse dos hooks RE_*). base.py ALINHADA em 09/08:
+    a duplicação foi eliminada e a classificação delega ao módulo;
+    override por banca = sobrescrever o hook de classe (regime FORTE,
+    igual ao parâmetro do módulo). Restam as cópias locais de
+    fgv.py/fcc.py/pci.py (cebraspe.py é caso à parte: classifica por
+    descricaoArquivo da API, não por heurística). Convergência no item
+    "Migrar pci.py e fcc.py para heuristics.py".
   - DOCS: os .md migram para docs/; na raiz fica só o README.md.
     Este backlog vive em docs/BACKLOG.org.
 
@@ -56,13 +58,22 @@
    prova é aplicada surge a seção "Provas e Gabaritos" na própria página.
    - [X] Copiar spiders/exemplo_banca.py → spiders/fgv.py
    - [ ] Listagem /concursos extrai os slugs disponíveis
-   - [ ] Filtrar PDFs pelo path /concursos/ (rodapé tem termos de uso e
+   - [X] Filtrar PDFs pelo path /concursos/ (rodapé tem termos de uso e
          aviso de cookies que NÃO são do concurso)
-   - [ ] Ignorar "Vista de Prova" (espelho do candidato, exige CPF)
-   - [ ] Classificação de papel: importar lexcorpus/heuristics.py
-         (ADR-0004) — ou herdar a base fina spiders/base.py pelo make_item
+   - [X] Ignorar "Vista de Prova" (espelho do candidato, exige CPF)
+   - [ ] Classificação de papel: hoje (08/08) o fgv.py usa cópias LOCAIS
+         de regex (_RE_GAB_*, eh_relevante) — mais estritas e CORRETAS
+         para o padrão FGV ("Gabarito Oficial Preliminar"). Migrar para
+         heuristics.py (ADR-0004) DEPOIS de corrigir o bug do "oficial"
+         no módulo (ver item em Pipeline/correções), promovendo as
+         regex do FGV a parâmetros nomeados
+   - [ ] Montar o item via make_item da base fina (hoje o fgv.py monta
+         o ArquivoItem na mão)
    - [ ] Teste de parse com fixture (modelo: tests/test_pci_parse.py)
-   - Quick win: HTTP puro, sem browser. ~1 dia.
+   Notas: aceita -a url= para páginas fora de /concursos/ (o cpnu2 vive
+   na raiz do site); CNU 2025 ensaiado (eventos_debug/cnu_2025.json);
+   nomes opacos (b1101.pdf) viram nomes semânticos {concurso}_{bloco}_
+   tipo_{n}.pdf. Quick win: HTTP puro, sem browser.
 
 ** TODO [#A] Watchlist YAML + scheduler (a automação)
    Hoje o crawl depende de `scrapy crawl X -a ...` na mão. Substituir
@@ -104,10 +115,12 @@
    - Fecha o ponto aberto "Ciclo preliminar → definitivo" do
      docs/COMUNICADO_INTEGRACAO_OK.md
 
-** TODO [#B] Migrar pci.py e fcc.py para heuristics.py (ADR-0004)
+** TODO [#B] Migrar pci.py e fcc.py para heuristics.py (ADR-0005)
+   Plano formalizado no ADR-0005 (09/08): ordem, pré-requisitos
+   encadeados (bug do "oficial" primeiro) e critérios de aceite.
    lexcorpus/heuristics.py (07/08) centraliza regex + classificar_papel +
-   eh_relevante como funções puras; cebraspe/agregador_generico/estrategia
-   já ajustados. Restam os dois spiders antigos.
+   eh_relevante como funções puras; agregador_generico/estrategia usam
+   via base fina (delegação desde 09/08). Restam os dois spiders antigos.
    - [ ] pci.py: trocar regex locais por import de heuristics; ATENÇÃO —
          o pci ainda tem a versão FRACA de eh_relevante (ver item
          "Falso positivo")
@@ -124,9 +137,24 @@
    Código entregue 07/08 (ver histórico), mas os seletores CSS foram
    escritos contra padrões comuns de blog/WordPress — precisam de
    validação contra o HTML real antes de entrar no watchlist.
-   - [ ] estrategia: rodar `scrapy crawl estrategia -a paginas=1` e
-         conferir descoberta de posts, paginação e extração de PDF
-   - [ ] estrategia: validar _inferir_banca contra títulos reais do blog
+   Validação parcial em 09/08 (fetch direto da listagem + 1 post real,
+   parse com os seletores do spider, sem crawl completo):
+   - [X] estrategia: descoberta de posts funciona (busca "prova
+         gabarito" retorna 155 links, 55 posts após dedup) — MAS o
+         filtro "/blog/" in url é permissivo demais: páginas
+         /blog/author/* entram como se fossem posts (crawl desperdiçado)
+   - [ ] estrategia: PAGINAÇÃO QUEBRADA — nenhum seletor de next
+         (a.next, a[rel=next], link[rel=next], .pagination a:last-child)
+         casa o HTML real da busca; o spider para na página 1 mesmo com
+         -a paginas=5. Inspecionar o markup real de paginação e ajustar
+   - [ ] estrategia: post recente de "provas aplicadas" (Sefaz CE 2026)
+         NÃO tem links a[href$='.pdf'] de gabarito — só edital/
+         retificações (descartados corretamente). Verificar como os
+         gabaritos são publicados no blog (link sem extensão? botão
+         JS?); o pdf_selector pode precisar de ampliação
+   - [ ] estrategia: _inferir_banca retornou "Desconhecida" em título
+         sem nome de banca ("Concurso Sefaz CE: ...") — limitação
+         esperada; avaliar fallback buscando a banca no corpo do post
    - [ ] agregador_generico: ensaio contra 1 agregador real (candidato:
          listagem pública sem captcha; PCI continua sendo descoberta, ver
          ADR-0001) e fixture de parse em tests/
@@ -194,6 +222,12 @@
    - NOTA 05/08: para PROVAS FCC (cadernos não públicos no site oficial),
      o PCI segue sendo a única fonte de cadernos — reforça a tensão
      deste item com a decisão "PCI só descoberta". Resolver no ADR-0001.
+   - CONFIRMADO 09/08: Turnstile continua ativo. Página real de download
+     (/provas/download/administracao-assembleia-legislativa-rs-fundatec-2026)
+     retorna 200 com cf-turnstile-response + POST /provas/link e ZERO
+     links <a ... .pdf> — o spider varre e não acha nada (warning
+     "nenhum PDF encontrado"). É o comportamento esperado, não bug:
+     `scrapy crawl pci` sem resultado = este bloqueio em ação.
 
 * Pipeline / correções
 ** EM-ANDAMENTO [#A] Config de ambiente: USER_AGENT real e RABBIT_URL por env
@@ -206,6 +240,21 @@
          com RABBIT_ENABLED: settings.py lê os.environ.get para ambos;
          default local inalterado (False / localhost)
    - [ ] Credenciais de produção fora do repo (.env + .env.example)
+
+** TODO [#A] BUG: "Gabarito Oficial Preliminar" vira gabarito_definitivo
+   Reproduzido em 09/08: RE_GAB_DEF inclui "oficial" como qualificador
+   de definitivo, então "Gabarito Oficial Preliminar" (rótulo padrão da
+   FGV) casa RE_GAB_DEF antes de RE_GAB_PRE. Afeta heuristics.py →
+   base.py delega nela (desde 09/08), então estrategia.py e
+   agregador_generico.py herdam o erro. fgv.py NÃO é afetado (regex
+   locais estritas: gabarito\s+oficial\s+definitiv / \s+preliminar).
+   - [ ] Corrigir a precedência EM heuristics.py (cópia única desde o
+         alinhamento da base): checar RE_GAB_PRE ANTES de RE_GAB_DEF,
+         ou remover "oficial" dos qualificadores de definitivo (um
+         gabarito "oficial" pode ser preliminar OU definitivo)
+   - [ ] Casos de teste: "Gabarito Oficial Preliminar" → preliminar;
+         "Gabarito Oficial Definitivo" → definitivo; "Gabarito" (sem
+         qualificador) → definitivo (regra vigente)
 
 ** TODO [#B] Falso positivo: editais de resultado com "prova" no nome
    A heurística de descarte só descarta se NÃO houver pista de
@@ -319,19 +368,21 @@
          override por regex de classe; mencionar a cadeia de técnicas
          com fallback como evolução prevista
 
-** TODO [#B] Atualizar README (novos spiders, automação, docs/)
+** EM-ANDAMENTO [#B] Atualizar README (novos spiders, automação, docs/)
    Depois dos itens acima:
-   - [ ] Estrutura: adicionar scheduler.py, spiders/base.py,
+   - [X] Estrutura: adicionar scheduler.py, spiders/base.py,
          agregador_generico.py, estrategia.py, watchlist.yaml,
-         Dockerfile, docker-compose
+         Dockerfile, docker-compose (parcial 09/08: spiders, heuristics,
+         base e ADRs entram; scheduler.py ainda não existe — ver item
+         próprio)
+   - [X] Tabela de bancas suportadas e status (cebraspe ✅, fcc ✅
+         gabaritos, fgv em construção, cesgranrio bloqueada, pci
+         descoberta, estrategia/agregador_generico em validação) — 09/08
    - [ ] Seção "Rodar": modo manual (scrapy crawl) E modo automático
          (scheduler + watchlist); modo container ao lado do LexLearn
-         (docker-compose.crawler.yml)
+         (docker-compose.crawler.yml) — depende do scheduler existir
    - [ ] Seção "Por onde começar": docs/CONTRATO.md → docs/BACKLOG.org →
          ADRs → schema/
-   - [ ] Tabela de bancas suportadas e status (cebraspe ✅, fcc ✅
-         gabaritos, fgv em construção, cesgranrio bloqueada, pci
-         descoberta, estrategia/agregador_generico em validação)
 
 * Alinhar com o LexLearn (contrato §9 — não mexer unilateralmente)
 ** TODO Vocabulário de slugs de cargo
@@ -351,8 +402,27 @@
    consumidor de teste do LexLearn ouvindo.
 
 * Feito (histórico recente)
+** FEITO base.py alinhada ao ADR-0004 (delegação, sem duplicação)  :spiders:
+   CLOSED: 2026-08-09
+   Revisão do commit 5348271 constatou que base.py duplicava regex e
+   lógica de classificação (cópia do regime FRACO) em vez de delegar —
+   duas fontes da verdade e override de classe com semântica divergente
+   do módulo. Refactor: base.py virou base fina de fato — make_item +
+   classificar_papel/eh_relevante que DELEGAM a heuristics.py,
+   repassando os hooks RE_* de classe como parâmetros nomeados. Hook
+   sobrescrito = regime FORTE (igual ao parâmetro do módulo; caso FCC).
+   Validado: paridade base↔módulo em 7 casos, override de classe forte
+   (resultado_preliminar_prova_objetiva → None), estrategia e
+   agregador_generico funcionando via herança, suíte pytest 5/5.
+   Pendente identificado na mesma revisão: bug do "oficial" (item
+   próprio, [#A]) — agora existe em UMA cópia só (o módulo).
 ** FEITO Heurísticas em módulo + base fina desacoplada (ADR-0004)    :spiders:
    CLOSED: 2026-08-07
+   ERRATA (09/08): parcialmente incorreto na data do fechamento — o
+   módulo heuristics.py existia como descrito, mas base.py NÃO era base
+   fina com delegação (tinha regex e lógica próprias). Alinhamento feito
+   em 09/08 — ver "base.py alinhada ao ADR-0004" abaixo. Registro
+   original mantido.
    lexcorpus/heuristics.py: regex de papel (RE_GAB_DEF, RE_GAB_PRE,
    RE_GAB, RE_PROVA, RE_DESCARTAR), classificar_papel() e eh_relevante()
    como funções puras, override por parâmetro nomeado. spiders/base.py
@@ -362,6 +432,10 @@
    decisão e alternativas no ADR-0004.
 ** FEITO cebraspe.py refatorado (base fina + heuristics.py)          :spiders:
    CLOSED: 2026-08-07
+   ERRATA (09/08): esta refatoração NÃO chegou ao código — cebraspe.py
+   segue herdando scrapy.Spider, com classificar_papel local e item
+   montado manualmente. Trabalho real fica no item "Alinhar base.py com
+   o ADR-0004". Registro original (não realizado) abaixo.
    Removidas as cópias locais de regex e a montagem manual do item
    (~40 linhas): classificação via heuristics.py (delegação da base),
    item via make_item. Comportamento preservado: mesmo endpoint da API,
@@ -388,7 +462,9 @@
    Sem browser: apis.cebraspe.org.br/cebraspe/eventos/{slug} +
    cdn.cebraspe.org.br. Classificação por descricaoArquivo (não
    heurística). Concurso PRF 2021: 20 arquivos (11 provas, 6 gabaritos
-   definitivos, 3 preliminares). Refatorado para a base em 07/08.
+   definitivos, 3 preliminares). A "refatoração para a base em 07/08"
+   antes registrada aqui não se concretizou (errata 09/08 — ver o item
+   "cebraspe.py refatorado" acima).
 ** FEITO Spider FCC (concursosfcc.com.br)                           :spiders:
    CLOSED: 2026-08-05
    spiders/fcc.py testado de ponta a ponta (dpeba125, pbaru125):
@@ -432,6 +508,10 @@
    reclassificado como fonte de descoberta apenas (ADR-0001).
 ** CANCELADO Heurísticas como módulo solto (lexcorpus/heuristics.py) :spiders:
    CLOSED: 2026-08-07
+   ERRATA (09/08): este cancelamento foi REVERTIDO pelo ADR-0004 no mesmo
+   dia — o módulo heuristics.py EXISTE, é a decisão vigente e a fonte da
+   verdade das heurísticas. Entrada mantida apenas como histórico da
+   oscilação de desenho (módulo → classe base → módulo).
    Substituído pela classe base LexCorpusSpider (spiders/base.py), que
    centraliza regex + classificar_papel + make_item e dá override por
    herança. O que restava do escopo (migrar pci.py/fcc.py, testes) virou
