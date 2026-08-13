@@ -61,15 +61,21 @@
    - [X] Filtrar PDFs pelo path /concursos/ (rodapé tem termos de uso e
          aviso de cookies que NÃO são do concurso)
    - [X] Ignorar "Vista de Prova" (espelho do candidato, exige CPF)
-   - [ ] Classificação de papel: hoje (08/08) o fgv.py usa cópias LOCAIS
+   - [X] Classificação de papel: hoje (08/08) o fgv.py usa cópias LOCAIS
          de regex (_RE_GAB_*, eh_relevante) — mais estritas e CORRETAS
          para o padrão FGV ("Gabarito Oficial Preliminar"). Migrar para
          heuristics.py (ADR-0004) DEPOIS de corrigir o bug do "oficial"
          no módulo (ver item em Pipeline/correções), promovendo as
          regex do FGV a parâmetros nomeados
-   - [ ] Montar o item via make_item da base fina (hoje o fgv.py monta
+         FEITO 13/08: fgv.py herda LexCorpusSpider e repassa regex FGV
+         pelos hooks RE_*; relevância preserva gabaritos retificados.
+   - [X] Montar o item via make_item da base fina (hoje o fgv.py monta
          o ArquivoItem na mão)
-   - [ ] Teste de parse com fixture (modelo: tests/test_pci_parse.py)
+         FEITO 13/08: make_item ganhou override opcional de slug canônico
+         para preservar -a concurso= (ex.: cnu_2025).
+   - [X] Teste de parse com fixture (modelo: tests/test_pci_parse.py)
+         FEITO 13/08: tests/test_fgv_parse.py cobre bloco, tipos,
+         gabarito oficial preliminar, definitivo retificado, descarte e dedup.
    Notas: aceita -a url= para páginas fora de /concursos/ (o cpnu2 vive
    na raiz do site); CNU 2025 ensaiado (eventos_debug/cnu_2025.json);
    nomes opacos (b1101.pdf) viram nomes semânticos {concurso}_{bloco}_

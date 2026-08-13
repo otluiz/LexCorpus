@@ -48,46 +48,42 @@ from urllib.parse import urljoin, urlparse
 
 import scrapy
 
-from ..items import ArquivoItem
+from .base import LexCorpusSpider
 from ..util import slugify
 
 
 CONCURSOS_BASE = "https://conhecimento.fgv.br/concursos/{slug}"
 
-_RE_GAB_DEF = re.compile(r"gabarito\s+oficial\s+definitiv", re.I)
-_RE_GAB_PRE = re.compile(r"gabarito\s+oficial\s+preliminar", re.I)
-_RE_GAB = re.compile(r"gabarito", re.I)
 _RE_TIPO = re.compile(r"^tipo\s*(\d+)$", re.I)
 _RE_BLOCO = re.compile(r"bloco\s+tem[áa]tico\s*(\d+)\s*[:\-–]?\s*(.*)", re.I)
 
-# PDFs que NÃO são prova nem gabarito — descartados
-_RE_DESCARTAR = re.compile(
-    r"edital|resultado|retifica|convoca|recurso|homologa|cronograma"
-    r"|inscri|isen[çc]|curriculo|nota.?de.?corte|certificado|sub.?judice"
-    r"|rela[çc][ãa]o|notas.?m[íi]nimas|provimento|vagas.?remanescentes"
-    r"|termo|aviso.?de.?cookies|pol[íi]tica|anexo",
-    re.I,
-)
-
-
-def eh_relevante(texto: str, url: str) -> bool:
-    alvo = f"{texto} {url}".lower()
-    if "gabarito" in alvo:
-        return True
-    if _RE_DESCARTAR.search(alvo):
-        return False
-    return True
-
-
-class FgvSpider(scrapy.Spider):
+class FgvSpider(LexCorpusSpider):
     name = "fgv"
     allowed_domains = ["conhecimento.fgv.br"]
+
+    RE_GAB_DEF = re.compile(r"gabarito\s+oficial\s+definitiv", re.I)
+    RE_GAB_PRE = re.compile(r"gabarito\s+oficial\s+preliminar", re.I)
+    RE_GAB = re.compile(r"gabarito", re.I)
+    RE_DESCARTAR = re.compile(
+        r"edital|resultado|convoca|recurso|homologa|cronograma"
+        r"|inscri|isen[çc]|curriculo|nota.?de.?corte|certificado|sub.?judice"
+        r"|rela[çc][ãa]o|notas.?m[íi]nimas|provimento|vagas.?remanescentes"
+        r"|termo|aviso.?de.?cookies|pol[íi]tica|anexo",
+        re.I,
+    )
 
     custom_settings = {
         "DOWNLOAD_DELAY": 2.0,
         "CONCURRENT_REQUESTS_PER_DOMAIN": 1,
         "ROBOTSTXT_OBEY": True,
     }
+
+    def eh_relevante(self, texto: str, url: str = "") -> bool:
+        """Na FGV, gabarito retificado continua sendo gabarito válido."""
+        alvo = f"{texto} {url}".lower()
+        if self.RE_GAB.search(alvo):
+            return True
+        return super().eh_relevante(texto, url)
 
     def __init__(self, url=None, slug=None, banca="FGV", concurso=None,
                  concurso_rotulo=None, *args, **kwargs):
@@ -106,8 +102,6 @@ class FgvSpider(scrapy.Spider):
         yield scrapy.Request(self.start_url, callback=self.parse_concurso)
 
     def parse_concurso(self, response):
-        banca = slugify(self.banca_rotulo)
-
         # slug do concurso: override > penúltimo segmento do path
         partes = [p for p in urlparse(response.url).path.split("/") if p]
         slug_pag = partes[-1].split(".")[0]
@@ -148,12 +142,12 @@ class FgvSpider(scrapy.Spider):
                 vistos.add(pdf_url)
 
                 texto_link = " ".join(a.css("::text").getall()).strip()
-                if not eh_relevante(texto_link, pdf_url):
+                if not self.eh_relevante(texto_link, pdf_url):
                     self.logger.info("descartado: %s", pdf_url)
                     continue
 
                 papel, tipo_prova, cargos_rotulo, multi = self._classificar(
-                    texto_link, bloco_atual
+                    texto_link, pdf_url, bloco_atual
                 )
                 if papel is None:
                     self.logger.info("não classificável, ignorado: %s", pdf_url)
@@ -162,20 +156,17 @@ class FgvSpider(scrapy.Spider):
                 nome = self._nome_final(pdf_url, papel, concurso,
                                         bloco_atual, tipo_prova)
 
-                item = ArquivoItem()
-                item["file_urls"] = [pdf_url]
-                item["fonte_url"] = pdf_url
-                item["nome"] = nome
-                item["banca"] = banca
-                item["concurso"] = concurso
-                item["banca_rotulo"] = self.banca_rotulo
-                item["concurso_rotulo"] = concurso_rotulo
-                item["cargos_rotulo"] = cargos_rotulo
-                item["papel"] = papel
-                item["cargos"] = list(cargos_rotulo.keys())
-                item["tipo_prova"] = tipo_prova
-                item["multi_cargo"] = multi
-                item["vigente"] = True
+                item = self.make_item(
+                    pdf_url=pdf_url,
+                    nome=nome,
+                    papel=papel,
+                    banca_rotulo=self.banca_rotulo,
+                    concurso_rotulo=concurso_rotulo,
+                    cargos_rotulo=cargos_rotulo,
+                    concurso=concurso,
+                    tipo_prova=tipo_prova,
+                    multi_cargo=multi,
+                )
                 self.logger.info("PDF [%s]: %s", papel, nome)
                 n += 1
                 yield item
@@ -188,15 +179,14 @@ class FgvSpider(scrapy.Spider):
                 response.url,
             )
 
-    def _classificar(self, texto_link, bloco_atual):
+    def _classificar(self, texto_link, pdf_url, bloco_atual):
         """Retorna (papel, tipo_prova, cargos_rotulo, multi_cargo)."""
-        if _RE_GAB_DEF.search(texto_link):
+        papel = self.classificar_papel(texto_link, pdf_url)
+        if papel == "gabarito_definitivo":
             # gabarito consolidado cobre TODOS os blocos/tipos do concurso
             return ("gabarito_definitivo", None, {"*": "*"}, True)
-        if _RE_GAB_PRE.search(texto_link):
+        if papel == "gabarito_preliminar":
             return ("gabarito_preliminar", None, {"*": "*"}, True)
-        if _RE_GAB.search(texto_link):
-            return ("gabarito_definitivo", None, {"*": "*"}, True)
 
         m_tipo = _RE_TIPO.match(texto_link)
         if m_tipo:
