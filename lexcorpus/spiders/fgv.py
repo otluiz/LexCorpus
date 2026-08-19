@@ -40,10 +40,17 @@ USO:
 
     # concurso regular (página em /concursos/{slug}):
     scrapy crawl fgv -a slug="dataprev26"
+
+    # DESCOBERTA: percorre a listagem /concursos (com paginação ?page=N) e
+    # extrai os slugs disponíveis — NÃO baixa PDF. Saída: JSONL em
+    # {EVENTOS_OUT_DIR}/descoberta/fgv.jsonl (alimenta o watchlist):
+    scrapy crawl fgv -a descoberta=1
 """
 from __future__ import annotations
 
+import json
 import re
+from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
 import scrapy
@@ -53,6 +60,7 @@ from ..util import slugify
 
 
 CONCURSOS_BASE = "https://conhecimento.fgv.br/concursos/{slug}"
+LISTAGEM_URL = "https://conhecimento.fgv.br/concursos"
 
 _RE_TIPO = re.compile(r"^tipo\s*(\d+)$", re.I)
 _RE_BLOCO = re.compile(r"bloco\s+tem[áa]tico\s*(\d+)\s*[:\-–]?\s*(.*)", re.I)
@@ -86,20 +94,70 @@ class FgvSpider(LexCorpusSpider):
         return super().eh_relevante(texto, url)
 
     def __init__(self, url=None, slug=None, banca="FGV", concurso=None,
-                 concurso_rotulo=None, *args, **kwargs):
+                 concurso_rotulo=None, descoberta=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        if not url and not slug:
+        self.descoberta = bool(descoberta)
+        if not self.descoberta and not url and not slug:
             raise ValueError(
                 'passe -a url="https://conhecimento.fgv.br/<pagina>" '
-                'ou -a slug="dataprev26"'
+                'ou -a slug="dataprev26" (ou -a descoberta=1 para listar '
+                'os slugs de /concursos)'
             )
-        self.start_url = url or CONCURSOS_BASE.format(slug=slug.strip().lower())
+        self.start_url = (
+            LISTAGEM_URL if self.descoberta
+            else url or CONCURSOS_BASE.format(slug=slug.strip().lower())
+        )
         self.banca_rotulo = banca
         self.concurso_slug = concurso          # override: ex. "cnu_2025"
         self.concurso_rotulo_arg = concurso_rotulo
+        self._descobertos = {}                 # slug -> {slug, rotulo, url}
 
     async def start(self):
-        yield scrapy.Request(self.start_url, callback=self.parse_concurso)
+        callback = self.parse_listagem if self.descoberta else self.parse_concurso
+        yield scrapy.Request(self.start_url, callback=callback)
+
+    def parse_listagem(self, response):
+        """Modo descoberta: extrai slugs da listagem /concursos (sem download).
+
+        Os cards de concurso são <a href="/concursos/{slug}" hreflang="pt-br">
+        — o atributo hreflang distingue os cards dos links de navegação
+        (/concursos, /concursos/nosso-portfolio#tabs). Paginação via
+        a[rel="next"] (?page=N).
+        """
+        for a in response.css('a[href^="/concursos/"][hreflang]'):
+            href = a.attrib.get("href", "")
+            partes = [p for p in urlparse(href).path.split("/") if p]
+            if len(partes) != 2:               # só /concursos/{slug}
+                continue
+            slug = partes[1]
+            if slug in self._descobertos:
+                continue
+            rotulo = " ".join(" ".join(a.css("::text").getall()).split())
+            self._descobertos[slug] = {
+                "banca": "fgv",
+                "slug": slug,
+                "rotulo": rotulo,
+                "url": urljoin(response.url, href),
+            }
+            self.logger.info("descoberto: %s — %s", slug, rotulo)
+
+        proxima = response.css('a[rel="next"]::attr(href)').get()
+        if proxima:
+            yield response.follow(proxima, callback=self.parse_listagem)
+
+    def closed(self, reason):
+        if not self.descoberta:
+            return
+        out_dir = Path(self.settings.get("EVENTOS_OUT_DIR", "eventos_debug"))
+        out_dir = out_dir / "descoberta"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        destino = out_dir / "fgv.jsonl"
+        with destino.open("w", encoding="utf-8") as f:
+            for d in sorted(self._descobertos.values(), key=lambda d: d["slug"]):
+                f.write(json.dumps(d, ensure_ascii=False) + "\n")
+        self.logger.info(
+            "descoberta FGV: %d slugs -> %s", len(self._descobertos), destino
+        )
 
     def parse_concurso(self, response):
         # slug do concurso: override > penúltimo segmento do path
