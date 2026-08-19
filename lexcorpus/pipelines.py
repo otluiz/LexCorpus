@@ -31,7 +31,16 @@ from .util import sha256_file, atomic_write_bytes
 # 1. Download — FilesPipeline customizado
 # ---------------------------------------------------------------------------
 class LexCorpusFilesPipeline(FilesPipeline):
-    """Baixa o PDF preservando o nome original numa pasta plana por concurso."""
+    """Baixa o PDF preservando o nome original numa pasta plana por concurso.
+
+    GATE ADMINISTRATIVO DE EXPIRAÇÃO: arquivo já baixado cuja idade passa de
+    FILES_EXPIRES NÃO é rebaixado automaticamente (o default do Scrapy seria
+    sobrescrever em cima). Provas são o acervo do LexLearn — re-download que
+    substitui arquivo existente é decisão do administrador. O pipeline mantém
+    o arquivo antigo, trata como "uptodate" e loga WARNING com a instrução.
+    Para autorizar o re-download dos expirados num crawl:
+        scrapy crawl X -s LEXCORPUS_REBAIXAR_EXPIRADOS=True
+    """
 
     def file_path(self, request, response=None, info=None, *, item=None):
         adapter = ItemAdapter(item)
@@ -39,6 +48,32 @@ class LexCorpusFilesPipeline(FilesPipeline):
         concurso = adapter["concurso"]
         nome = adapter.get("nome") or request.url.rsplit("/", 1)[-1]
         return f"{banca}/{concurso}/{nome}"
+
+    def _onsuccess(self, result, request, info, path):
+        file_info = super()._onsuccess(result, request, info, path)
+        if file_info is not None or not result or not result.get("last_modified"):
+            # uptodate normal, ou arquivo inexistente (download legítimo)
+            return file_info
+        # chegou aqui: o arquivo EXISTE mas está "expirado" — o Scrapy
+        # rebaixaria e sobrescreveria. Segurar para o administrador decidir.
+        if info.spider.settings.getbool("LEXCORPUS_REBAIXAR_EXPIRADOS", False):
+            info.spider.logger.warning(
+                "re-download autorizado (LEXCORPUS_REBAIXAR_EXPIRADOS): %s", path
+            )
+            return None
+        info.spider.logger.warning(
+            "arquivo expirado MANTIDO (decisão pendente do administrador): %s "
+            "— para rebaixar e substituir, rode o crawl com "
+            "-s LEXCORPUS_REBAIXAR_EXPIRADOS=True",
+            path,
+        )
+        self.inc_stats("expirado_mantido")
+        return {
+            "url": request.url,
+            "path": path,
+            "checksum": result.get("checksum"),
+            "status": "uptodate",
+        }
 
 
 # ---------------------------------------------------------------------------

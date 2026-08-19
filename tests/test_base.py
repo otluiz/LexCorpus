@@ -108,6 +108,20 @@ def test_make_item_multi_cargo(spider):
     assert item["tipo_prova"] is None
 
 
+def test_make_item_permite_slug_canonico_distinto_do_rotulo(spider):
+    item = spider.make_item(
+        pdf_url="https://x/gab.pdf",
+        nome="gab.pdf",
+        papel="gabarito_preliminar",
+        banca_rotulo="FGV",
+        concurso_rotulo="Concurso Público Nacional Unificado 2025",
+        cargos_rotulo={"*": "*"},
+        concurso="cnu_2025",
+    )
+    assert item["concurso"] == "cnu_2025"
+    assert item["concurso_rotulo"] == "Concurso Público Nacional Unificado 2025"
+
+
 # --- spiders que herdam a base seguem funcionando ------------------------------
 
 def test_spiders_reais_usam_a_delegacao():

@@ -38,8 +38,13 @@ RETRY_HTTP_CODES = [429, 500, 502, 503, 504, 408]
 FILES_STORE = os.environ.get("LEXCORPUS_FILES_STORE", "/data/raw/exams")
 # Esquema usado ao montar pasta_uri no evento (contrato §7). file:// hoje.
 STORAGE_URI_SCHEME = "file://"
-# Expira o cache de download: não rebaixa o mesmo arquivo dentro de N dias.
-FILES_EXPIRES = 90
+# Cache de download (~2 anos): um PDF já baixado não é rebaixado dentro de
+# 700 dias. PROVA NÃO EXPIRA — passado o prazo, o pipeline NÃO sobrescreve
+# sozinho: mantém o arquivo e pede decisão do administrador (WARNING no log).
+# Para autorizar o re-download dos expirados num crawl:
+#   scrapy crawl X -s LEXCORPUS_REBAIXAR_EXPIRADOS=True
+# (ver LexCorpusFilesPipeline._onsuccess em pipelines.py)
+FILES_EXPIRES = 700
 
 # --- RabbitMQ ----------------------------------------------------------------
 #RABBIT_ENABLED = True                   # True em produção; False grava evento em disco

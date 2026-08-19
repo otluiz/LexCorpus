@@ -28,6 +28,7 @@ mensagem estão em `schema/evento.schema.json` e `schema/sidecar.schema.json`.
         exemplo_banca.py     modelo de um spider por banca
         cesgranrio.py        ESQUELETO gerado (ADR-0006) — validar seletores
         cebraspe.py          API oficial de eventos + CDN
+        cesgranrio.py        API pública do portal (blocos de conteúdo)
         fcc.py               gabaritos oficiais (cadernos não são públicos)
         fgv.py               conhecimento.fgv.br (inclui o CNU)
         pci.py               PCI Concursos — modo teste (ADR-0001: PCI é
@@ -46,16 +47,21 @@ mensagem estão em `schema/evento.schema.json` e `schema/sidecar.schema.json`.
 |------------|----------------------|------------------------------------------|
 | CEBRASPE   | `cebraspe`           | ✅ funcional (API oficial)                |
 | FCC        | `fcc`                | ✅ gabaritos oficiais (provas via PCI)    |
-| FGV        | `fgv`                | 🚧 em construção (CNU 2025 ensaiado)      |
+| FGV        | `fgv`                | ✅ funcional (+ descoberta de slugs)      |
 | PCI        | `pci`                | 🔎 descoberta apenas (ADR-0001)           |
 | Estratégia | `estrategia`         | 🧪 código pronto, validação em andamento  |
 | Agregadores| `agregador_generico` | 🧪 código pronto, validação em andamento  |
-| Cesgranrio | —                    | ⛔ bloqueada (WAF/Azure Front Door)       |
+| Cesgranrio | `cesgranrio`         | ✅ funcional (API pública do portal)      |
 
 ## Rodar (modo dev, sem RabbitMQ)
 
     pip install -r requirements.txt
     scrapy crawl exemplo_banca      # grava eventos em eventos_debug/*.json
+
+Descoberta (só lista os concursos disponíveis, sem baixar PDF — grava JSONL
+em `eventos_debug/descoberta/`):
+
+    scrapy crawl fgv -a descoberta=1
 
 Em produção: `RABBIT_ENABLED=True` no settings (ou via -s), e o publisher
 emite no exchange `lexcorpus.events` com routing key `concurso.disponivel`.

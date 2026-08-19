@@ -69,10 +69,11 @@ class LexCorpusSpider(scrapy.Spider):
         )
 
     def make_item(self, *, pdf_url, nome, papel, banca_rotulo, concurso_rotulo,
-                  cargos_rotulo, tipo_prova=None, multi_cargo=False, vigente=True):
+                  cargos_rotulo, banca=None, concurso=None, tipo_prova=None,
+                  multi_cargo=False, vigente=True):
         """Cria um ArquivoItem populado e slugificado (contrato v2.0)."""
-        banca = slugify(banca_rotulo)
-        concurso = slugify(concurso_rotulo)
+        banca = banca or slugify(banca_rotulo)
+        concurso = concurso or slugify(concurso_rotulo)
         cargos = list(cargos_rotulo.keys())
 
         item = ArquivoItem()
