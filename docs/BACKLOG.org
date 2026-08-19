@@ -49,38 +49,16 @@
     "Migrar pci.py e fcc.py para heuristics.py".
   - DOCS: os .md migram para docs/; na raiz fica só o README.md.
     Este backlog vive em docs/BACKLOG.org.
+  - PROVA NÃO EXPIRA (18/08): FILES_EXPIRES passou de 90 para 700 dias E,
+    mais importante, o FilesPipeline ganhou GATE ADMINISTRATIVO
+    (_onsuccess em pipelines.py): arquivo "expirado" NÃO é rebaixado/
+    sobrescrito automaticamente — o crawl mantém o arquivo e loga WARNING
+    pedindo decisão do administrador, que autoriza com
+    -s LEXCORPUS_REBAIXAR_EXPIRADOS=True. Os arquivos são o acervo do
+    LexLearn (DNA das bancas); substituição nunca é efeito colateral de
+    cache. Política de expurgo, se um dia existir, será objeto de estudo.
 
 * Em andamento / próximos
-** EM-ANDAMENTO [#A] Spider FGV (conhecimento.fgv.br)
-   Site Drupal, HTML estático, SEM captcha (verificado 05/08). Página do
-   concurso: /concursos/{slug} (ex.: dataprev26). PDFs servidos de
-   /sites/default/files/concursos/*.pdf, nomes descritivos. Quando a
-   prova é aplicada surge a seção "Provas e Gabaritos" na própria página.
-   - [X] Copiar spiders/exemplo_banca.py → spiders/fgv.py
-   - [ ] Listagem /concursos extrai os slugs disponíveis
-   - [X] Filtrar PDFs pelo path /concursos/ (rodapé tem termos de uso e
-         aviso de cookies que NÃO são do concurso)
-   - [X] Ignorar "Vista de Prova" (espelho do candidato, exige CPF)
-   - [X] Classificação de papel: hoje (08/08) o fgv.py usa cópias LOCAIS
-         de regex (_RE_GAB_*, eh_relevante) — mais estritas e CORRETAS
-         para o padrão FGV ("Gabarito Oficial Preliminar"). Migrar para
-         heuristics.py (ADR-0004) DEPOIS de corrigir o bug do "oficial"
-         no módulo (ver item em Pipeline/correções), promovendo as
-         regex do FGV a parâmetros nomeados
-         FEITO 13/08: fgv.py herda LexCorpusSpider e repassa regex FGV
-         pelos hooks RE_*; relevância preserva gabaritos retificados.
-   - [X] Montar o item via make_item da base fina (hoje o fgv.py monta
-         o ArquivoItem na mão)
-         FEITO 13/08: make_item ganhou override opcional de slug canônico
-         para preservar -a concurso= (ex.: cnu_2025).
-   - [X] Teste de parse com fixture (modelo: tests/test_pci_parse.py)
-         FEITO 13/08: tests/test_fgv_parse.py cobre bloco, tipos,
-         gabarito oficial preliminar, definitivo retificado, descarte e dedup.
-   Notas: aceita -a url= para páginas fora de /concursos/ (o cpnu2 vive
-   na raiz do site); CNU 2025 ensaiado (eventos_debug/cnu_2025.json);
-   nomes opacos (b1101.pdf) viram nomes semânticos {concurso}_{bloco}_
-   tipo_{n}.pdf. Quick win: HTTP puro, sem browser.
-
 ** TODO [#A] Watchlist YAML + scheduler (a automação)
    Hoje o crawl depende de `scrapy crawl X -a ...` na mão. Substituir
    por uma lista de alvos versionada no repo (watchlist.yaml, já há um
@@ -103,8 +81,10 @@
    O contrato modela o ciclo (vigente, substituido_por, concurso.
    atualizado) mas NADA disso está implementado: hoje toda coleta publica
    concurso.disponivel com vigente=true, e a routing key
-   RABBIT_ROUTING_ATUALIZADO existe no settings sem uso. O FILES_EXPIRES=90
-   evita re-download, mas não sabe dizer "o definitivo chegou".
+   RABBIT_ROUTING_ATUALIZADO existe no settings sem uso. O cache de
+   download dura 700 dias e, mesmo vencido, o pipeline segura o arquivo
+   para decisão do administrador (gate 18/08) — mas nada sabe dizer "o
+   definitivo chegou".
    Solução: SQLite pequeno no volume de estado.
    - [ ] Tabela arquivo_visto(banca, concurso, nome, papel, checksum,
          vigente, first_seen, last_seen)
@@ -198,20 +178,12 @@
    - [ ] PCI /provas/ + /provas/{cargo} (sem captcha — verificado 05/08):
          o agregador mais rico; descobre concursos de TODAS as bancas.
          Candidato a rodar via agregador_generico parametrizado (07/08)
-   - [ ] FGV /concursos (slugs ativos)
+   - [X] FGV /concursos (slugs ativos) — FEITO 18/08 via modo descoberta
+         do próprio spider fgv (-a descoberta=1 → eventos_debug/descoberta/
+         fgv.jsonl, 339 slugs em 13 páginas)
    - [ ] FCC raiz do concursosfcc.com.br
    - [ ] Saída: JSONL em eventos_debug/descoberta/ (ou fila própria depois)
    - É o uso correto do PCI: índice, não fonte de arquivo (ver ADR-0001)
-
-** BLOQUEADO Spider Cesgranrio — WAF (Azure Front Door)
-   cesgranrio.org.br retorna 403 para qualquer cliente não-navegador,
-   mesmo com headers completos de browser (verificado 05/08 — o bloqueio
-   é do Azure Front Door, aparentemente por fingerprint/reputação de IP).
-   - Depende de: imagem variante com Playwright (item Docker) +
-     scrapy-playwright com contexto persistente
-   - Se o WAF barrar IP de datacenter mesmo com browser real: proxy
-     residencial ou aceitar Cesgranrio como cobertura parcial
-   - Não começar antes de FGV estar no ar (quick wins primeiro)
 
 ** BLOQUEADO PCI como fonte de PDFs (Turnstile + robots.txt)
    Página de download tem ZERO links .pdf: os arquivos ficam atrás de um
@@ -306,6 +278,9 @@
    UMA imagem para todo o projeto; um segundo target adiciona Chromium+
    Playwright só para os spiders que precisam (Cesgranrio; PCI se um dia
    for reaberto). Imagem principal fica enxuta.
+   NOTA 18/08: a Cesgranrio foi desbloqueada SEM Playwright (API JSON
+   pública — ver item FEITO no histórico). Hoje NENHUM spider ativo
+   precisa de browser; o stage playwright fica só para o PCI, se reaberto.
    - [X] Stage base (versão inicial 05/08): python:3.11-slim +
          requirements.txt + código, ENTRYPOINT scrapy, .dockerignore
          excluindo venv/.git/eventos_debug
@@ -411,6 +386,61 @@
    consumidor de teste do LexLearn ouvindo.
 
 * Feito (histórico recente)
+** FEITO Spider Cesgranrio — API pública do portal (sem Playwright)  :spiders:
+   CLOSED: 2026-08-18
+   Estava BLOQUEADO desde 05/08 (403 do Azure Front Door para qualquer
+   cliente não-navegador). Re-diagnóstico 18/08: o site foi reformulado,
+   o WAF não bloqueia mais HTTP simples e a SPA do portal consome uma API
+   JSON PÚBLICA — Playwright desnecessário (stage playwright do Dockerfile
+   perde a única banca que o justificava por ora). spiders/cesgranrio.py:
+   GET /api/PortalEventos/{id} + /api/PortalEventoConteudos/publico/{id};
+   blocos {titulo, texto(HTML)} com links Azure Blob (SAS próprio, válido
+   até 2036). Classificação pelo termo inicial do link + título do bloco
+   (PROVAS→prova, GABARITOS→preliminar, GABARITO FINAL→definitivo);
+   descarte FORTE via hook RE_DESCARTAR (armadilhas cobertas: "LISTAGEM
+   GERAL - PROVA DE TÍTULOS" não é prova; "ANALISTA" não pode casar
+   "lista"). Cargo extraído do texto do link preservando numeral romano
+   final ("TÉCNICO BANCÁRIO I" ≠ "III"). Validado: parse seco nos 12
+   eventos ativos + crawl real BNB 01/2024 (evento_id=10): 5 PDFs (3
+   provas, 1 gabarito preliminar, 1 definitivo), sidecars e evento v2.0.
+   Eventos 100% digitais/em andamento retornam 0 itens (normal).
+   Teste: tests/test_cesgranrio_parse.py. Uso:
+   scrapy crawl cesgranrio -a evento_id=N (ids em /api/PortalEventos).
+** FEITO [#A] Spider FGV (conhecimento.fgv.br)                       :spiders:
+   CLOSED: 2026-08-18
+   Site Drupal, HTML estático, SEM captcha (verificado 05/08). Página do
+   concurso: /concursos/{slug} (ex.: dataprev26). PDFs servidos de
+   /sites/default/files/concursos/*.pdf, nomes descritivos. Quando a
+   prova é aplicada surge a seção "Provas e Gabaritos" na própria página.
+   - [X] Copiar spiders/exemplo_banca.py → spiders/fgv.py
+   - [X] Listagem /concursos extrai os slugs disponíveis
+         FEITO 18/08: modo descoberta (-a descoberta=1) percorre a listagem
+         com paginação (a[rel=next], ?page=N), extrai slug+rótulo dos cards
+         (a[href^="/concursos/"][hreflang]) e grava JSONL em
+         eventos_debug/descoberta/fgv.jsonl. Validado no site real:
+         339 slugs em 13 páginas.
+   - [X] Filtrar PDFs pelo path /concursos/ (rodapé tem termos de uso e
+         aviso de cookies que NÃO são do concurso)
+   - [X] Ignorar "Vista de Prova" (espelho do candidato, exige CPF)
+   - [X] Classificação de papel: hoje (08/08) o fgv.py usa cópias LOCAIS
+         de regex (_RE_GAB_*, eh_relevante) — mais estritas e CORRETAS
+         para o padrão FGV ("Gabarito Oficial Preliminar"). Migrar para
+         heuristics.py (ADR-0004) DEPOIS de corrigir o bug do "oficial"
+         no módulo (ver item em Pipeline/correções), promovendo as
+         regex do FGV a parâmetros nomeados
+         FEITO 13/08: fgv.py herda LexCorpusSpider e repassa regex FGV
+         pelos hooks RE_*; relevância preserva gabaritos retificados.
+   - [X] Montar o item via make_item da base fina (hoje o fgv.py monta
+         o ArquivoItem na mão)
+         FEITO 13/08: make_item ganhou override opcional de slug canônico
+         para preservar -a concurso= (ex.: cnu_2025).
+   - [X] Teste de parse com fixture (modelo: tests/test_pci_parse.py)
+         FEITO 13/08: tests/test_fgv_parse.py cobre bloco, tipos,
+         gabarito oficial preliminar, definitivo retificado, descarte e dedup.
+   Notas: aceita -a url= para páginas fora de /concursos/ (o cpnu2 vive
+   na raiz do site); CNU 2025 ensaiado (eventos_debug/cnu_2025.json);
+   nomes opacos (b1101.pdf) viram nomes semânticos {concurso}_{bloco}_
+   tipo_{n}.pdf. Quick win: HTTP puro, sem browser.
 ** FEITO base.py alinhada ao ADR-0004 (delegação, sem duplicação)  :spiders:
    CLOSED: 2026-08-09
    Revisão do commit 5348271 constatou que base.py duplicava regex e
