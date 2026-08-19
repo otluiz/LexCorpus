@@ -1,0 +1,16 @@
+version: 1
+vigentes:
+- organ: Transpetro
+  organ_slug: transpetro
+  concurso: transpetro_2026
+  concurso_rotulo: Transpetro 2026
+  edital_ano: 2026
+  cargos:
+  - Analista de Sistemas
+  - Administrador
+  - Engenheiro de Produção
+  status: aguardando_banca
+  observacao: ''
+  edital_data: '2026-08-01'
+  encerrado_em: '2027-09-01'
+passados: {}

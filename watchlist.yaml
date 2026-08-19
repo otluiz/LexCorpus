@@ -40,15 +40,28 @@ alvos:
     ativo: false               # ativar quando spiders/fcc.py existir
 
   # --- CESGRANRIO — bloqueado (WAF; precisa imagem Playwright) ----------
-  # - banca: cesgranrio
-  #   spider: cesgranrio
-  #   params: {slug: "..."}
-  #   cron: "0 6,18 * * *"
-  #   ativo: false
+  # Entrada abaixo gerada pela descoberta ADR-0006 (buscador + orquestrador):
+  # Transpetro 2026, banca Cesgranrio (catálogo PCI confirma certames
+  # Cesgranrio×Transpetro 2006–2023). spiders/cesgranrio.py é ESQUELETO —
+  # validar PDF_SELECTOR contra o HTML real antes de ativar.
+  - banca: cesgranrio
+    spider: cesgranrio
+    organ: Transpetro
+    concurso: transpetro_2026
+    edital_data: "2026-08-01"
+    cargos: [Analista de Sistemas, Administrador, Engenheiro de Produção]
+    params: {url: "https://www.cesgranrio.org.br/concurso/transpetro-2026/"}
+    cron: "0 */6 * * *"
+    ativo: false  # ESQUELETO: validar seletores antes de ativar
 
 # Spiders de descoberta: percorrem SÓ listagens (sem baixar PDF) e propõem
 # novos alvos. Saída em eventos_debug/descoberta/; promoção ao watchlist
 # é manual por enquanto (revisar antes de ativar).
+#
+# Desde o ADR-0006, alvos novos podem nascer da camada de descoberta
+# (lexcorpus/buscador.py + orquestrador.py): o `catalogo.yaml` mantém as
+# listas vivas vigentes/passados (ano/banca/cargos), e o watchlist é a
+# materialização dos vigentes que já têm spider validado.
 descoberta:
   - spider: pci_descoberta     # PCI como índice — nunca como fonte de PDF
     cron: "0 5 * * *"          # ADR-0001: Turnstile + robots.txt /*.pdf

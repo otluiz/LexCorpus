@@ -16,10 +16,17 @@ mensagem estão em `schema/evento.schema.json` e `schema/sidecar.schema.json`.
       pipelines.py    download (FilesPipeline) -> sidecar -> evento RabbitMQ
       settings.py     throttle, retry, storage, cadeia de pipelines
       util.py         slugify, checksum SHA-256, escrita atômica
+      buscador.py            busca por palavra-chave: descobre a banca e o ano
+                             dos concursos anteriores de um órgão (ADR-0006)
+      catalogo.py            catálogo dinâmico vigentes/passados
+                             (ano{mês/dia}/banca/cargos, YAML versionado)
+      orquestrador.py        mapeia banca→spider, monta o `scrapy crawl` ou
+                             gera esqueleto parametrizável (ADR-0006)
       spiders/
         base.py              LexCorpusSpider — make_item (fábrica do
                              ArquivoItem do contrato v2.0)
         exemplo_banca.py     modelo de um spider por banca
+        cesgranrio.py        ESQUELETO gerado (ADR-0006) — validar seletores
         cebraspe.py          API oficial de eventos + CDN
         fcc.py               gabaritos oficiais (cadernos não são públicos)
         fgv.py               conhecimento.fgv.br (inclui o CNU)
@@ -72,6 +79,43 @@ definir nada (o default já aponta pra lá).
 O contrato (§7) mantém `pasta_uri` com esquema `file://` no evento, então o
 LexLearn resolve o ponteiro independentemente de onde o storage esteja montado.
 
+## Descoberta por palavra-chave (ADR-0006)
+
+Quando um concurso concorrido entra "no ar" (ex.: Transpetro 2026), use o
+fluxo de descoberta para achar quem examinou os certames anteriores:
+
+    # 1. buscar na Internet a banca/ano dos concursos anteriores
+    python3 -m lexcorpus.buscador "Transpetro" --cargo "analista de sistemas" \
+        --saida /tmp/tp.json          # JSON completo
+    python3 -m lexcorpus.buscador "Transpetro" --cargo "analista" --resumo   # legível
+
+    # 2. orquestrar a coleta a partir da melhor candidata (rank 0)
+    python3 -m lexcorpus.orquestrador --from-json /tmp/tp.json \
+        --rank 0 --concurso transpetro_2023
+    # → imprime o `scrapy crawl` pronto (banca com spider) ou gera o
+    #   esqueleto parametrizável (banca sem spider, ex.: Cesgranrio/WAF)
+
+    # 3. manter o catálogo dinâmico vigentes/passados
+    python3 -m lexcorpus.catalogo add --organ Transpetro --edital-ano 2026 \
+        --edital-data 2026-08-01 --cargos "Analista de Sistemas,Administrador"
+    python3 -m lexcorpus.catalogo update-busca --organ Transpetro   # sugere banca
+    python3 -m lexcorpus.catalogo move --chave transpetro_2026      # vigente→passado
+    python3 -m lexcorpus.catalogo expire --hoje 2027-01-01          # migra vencidos
+
+Backends de busca: `--backend bing` (default, estável), `duckduckgo`,
+`google`. A descoberta triangula no catálogo do órgão no PCI Concursos
+(ADR-0001: índice, nunca fonte de PDF) — o campo
+`confirmado_por_catálogo_do_órgão` indica que a banca+ano foram vistos em
+certames reais daquele órgão.
+
+## Catálogo dinâmico
+
+`catalogo.yaml` mantém as listas **vigentes** (certames no ar, status
+`aguardando_banca|coletando|pausado`) e **passados** (histórico, hierarquia
+ano → banca → cargos). A lista é viva: novos editais entram em vigentes,
+encerrados migram para passados — manualmente (`move`) ou por política de
+idade (`expire --max-dias-vigente`, ideal em cron semestral).
+
 ## Um spider por banca
 
 Copie `spiders/exemplo_banca.py`, ajuste os seletores e a classificação de
@@ -87,7 +131,9 @@ dentro do spider.
 
 1. `docs/CONTRATO.md` — o acordo com o LexLearn (v2.0)
 2. `docs/BACKLOG.org` — estado das tarefas e decisões recentes
-3. `docs/architecture/decisions/` — ADRs (ADR-0004 heurísticas,
+3. `docs/ADR-0006-busca-por-palavra-chave.md` — descoberta, catálogo e
+   orquestração (ADR-0006)
+4. `docs/architecture/decisions/` — ADRs (ADR-0004 heurísticas,
    ADR-0005 migração dos spiders antigos; ADR-0001/0002 pendentes — ver
    backlog)
-4. `schema/` — os JSON Schemas do contrato
+5. `schema/` — os JSON Schemas do contrato
