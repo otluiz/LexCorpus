@@ -22,6 +22,9 @@ mensagem estão em `schema/evento.schema.json` e `schema/sidecar.schema.json`.
                              (ano{mês/dia}/banca/cargos, YAML versionado)
       orquestrador.py        mapeia banca→spider, monta o `scrapy crawl` ou
                              gera esqueleto parametrizável (ADR-0006)
+      consulta.py            CLI de consulta ao storage: filtra os sidecars
+                             por banca/concurso/cargo/papel e lista ou copia
+                             os PDFs (lado leitor; não baixa nada da rede)
       spiders/
         base.py              LexCorpusSpider — make_item (fábrica do
                              ArquivoItem do contrato v2.0)
@@ -84,6 +87,20 @@ definir nada (o default já aponta pra lá).
 
 O contrato (§7) mantém `pasta_uri` com esquema `file://` no evento, então o
 LexLearn resolve o ponteiro independentemente de onde o storage esteja montado.
+
+## Consultar o storage
+
+`lexcorpus/consulta.py` lista (ou copia) os PDFs já coletados, filtrando pelos
+metadados dos sidecars — sem baixar nada da rede:
+
+    python -m lexcorpus.consulta --banca cesgranrio
+    python -m lexcorpus.consulta --concurso bnb0124 --papel prova
+    python -m lexcorpus.consulta --cargo analista_bancario_1 --papel gabarito
+    python -m lexcorpus.consulta --banca fgv --copiar /tmp/selecao
+
+`--papel gabarito` abrange preliminar + definitivo; `--cargo` inclui os
+consolidados multi-cargo (`cargos: ["*"]`, contrato §5). O storage vem de
+`--store`, de `LEXCORPUS_FILES_STORE` ou do default Docker.
 
 ## Descoberta por palavra-chave (ADR-0006)
 

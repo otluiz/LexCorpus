@@ -386,6 +386,17 @@
    consumidor de teste do LexLearn ouvindo.
 
 * Feito (histórico recente)
+** FEITO CLI de consulta ao storage (lexcorpus/consulta.py)        :pipeline:
+   CLOSED: 2026-08-25
+   Lado leitor do storage: varre os sidecars (*.meta.json) no layout do
+   contrato §6.9 ({banca}/{concurso}/) e filtra por banca (exata),
+   concurso (trecho), cargo (inclui consolidados multi-cargo "*", §5) e
+   papel ("gabarito" abrange preliminar + definitivo). --copiar DIR leva
+   PDF + sidecar. Storage via --store / LEXCORPUS_FILES_STORE / default
+   Docker — mesma precedência do settings.py. Não baixa nada da rede.
+   Validado contra o storage real (cesgranrio/bnb0124, fgv/cnu_2025,
+   fcc/dpeba125) + tests/test_consulta.py (10 casos, storage fake em
+   tmp_path).
 ** FEITO Spider Cesgranrio — API pública do portal (sem Playwright)  :spiders:
    CLOSED: 2026-08-18
    Estava BLOQUEADO desde 05/08 (403 do Azure Front Door para qualquer
