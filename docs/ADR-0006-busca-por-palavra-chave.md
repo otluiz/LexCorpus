@@ -4,6 +4,15 @@
 **Data:** 2026-08-19
 **Autores:** Prof. Othon Luiz, Manus AI
 
+> **ERRATA (25/08):** a premissa "Cesgranrio bloqueada por WAF (Azure Front
+> Door 403), exige esqueleto Playwright" — citada na Decisão §3, nas
+> Consequências (risco b) e no Fluxo de referência — deixou de valer em
+> 18/08: o portal foi reformulado e expõe uma API JSON pública
+> (`/api/PortalEventos/{id}`), sem browser. `spiders/cesgranrio.py` é um
+> spider real (`-a evento_id=N`) e o `SPIDERS_POR_BANCA` do orquestrador já
+> aponta para ele. O mecanismo de esqueleto + rota Playwright permanece
+> para bancas futuras com WAF. O restante do ADR segue vigente.
+
 ## Contexto
 
 O LexCorpus já é funcional para **baixar** provas de bancas conhecidas

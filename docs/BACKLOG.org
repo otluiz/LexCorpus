@@ -386,6 +386,20 @@
    consumidor de teste do LexLearn ouvindo.
 
 * Feito (histórico recente)
+** FEITO ADR-0006: busca por palavra-chave + catálogo + orquestrador :pesquisa:
+   CLOSED: 2026-08-25
+   Entregue em 19/08 (buscador.py, catalogo.py, orquestrador.py +
+   catalogo.yaml, tests/test_buscador.py), faltava o registro aqui e a
+   varredura de consistência pós-Cesgranrio. Fechamento 25/08:
+   - orquestrador: SPIDERS_POR_BANCA["cesgranrio"] aponta para o spider
+     real (API pública, -a evento_id=N) — não mais "BLOQUEADA/WAF".
+     montar_comando generalizado: params fora de url/slug/banca/cargo
+     (ex.: evento_id) vão direto ou viram placeholder <PREENCHER> com
+     aviso ao operador
+   - ADR-0006: errata no topo registrando que a premissa "Cesgranrio
+     bloqueada por WAF" caducou em 18/08 (API JSON pública, sem
+     Playwright); o mecanismo esqueleto+Playwright fica para WAFs futuros
+   - README: removida a linha duplicada "cesgranrio.py ESQUELETO"
 ** FEITO CLI de consulta ao storage (lexcorpus/consulta.py)        :pipeline:
    CLOSED: 2026-08-25
    Lado leitor do storage: varre os sidecars (*.meta.json) no layout do

@@ -29,7 +29,6 @@ mensagem estão em `schema/evento.schema.json` e `schema/sidecar.schema.json`.
         base.py              LexCorpusSpider — make_item (fábrica do
                              ArquivoItem do contrato v2.0)
         exemplo_banca.py     modelo de um spider por banca
-        cesgranrio.py        ESQUELETO gerado (ADR-0006) — validar seletores
         cebraspe.py          API oficial de eventos + CDN
         cesgranrio.py        API pública do portal (blocos de conteúdo)
         fcc.py               gabaritos oficiais (cadernos não são públicos)
