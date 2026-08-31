@@ -59,24 +59,6 @@
     cache. Política de expurgo, se um dia existir, será objeto de estudo.
 
 * Em andamento / próximos
-** TODO [#A] Watchlist YAML + scheduler (a automação)
-   Hoje o crawl depende de `scrapy crawl X -a ...` na mão. Substituir
-   por uma lista de alvos versionada no repo (watchlist.yaml, já há um
-   esqueleto inicial) + um scheduler que dispara os crawls vencidos.
-   É isto que transforma "rodar na mão" em "rodar sozinho". Continua
-   monolito: o scheduler é um módulo do projeto, não um serviço novo.
-   - [ ] lexcorpus/scheduler.py: lê watchlist.yaml, calcula alvos vencidos
-         pelo cron de cada um, dispara CrawlerProcess (sequencial por
-         banca; bancas distintas podem sobrepor)
-   - [ ] Campos do alvo: banca, spider, params, cron, ativo (false =
-         spider ainda não existe / pausado)
-   - [ ] Seção "descoberta": spiders de listagem rodam 1x/dia e PROPÕEM
-         novos alvos (saída em log/arquivo; promoção ao watchlist é
-         manual por enquanto)
-   - [ ] Começar com loop simples (schedule/APScheduler); supercronic é
-         alternativa se preferir cron puro no container
-   - [ ] Registrar último disparo por alvo (no StateStore, ver item abaixo)
-
 ** TODO [#A] StateStore + ciclo preliminar→definitivo (contrato §6.11)
    O contrato modela o ciclo (vigente, substituido_por, concurso.
    atualizado) mas NADA disso está implementado: hoje toda coleta publica
@@ -217,7 +199,10 @@
          (padrão FILES_STORE que já usa os.environ). FEITO 05/08 junto
          com RABBIT_ENABLED: settings.py lê os.environ.get para ambos;
          default local inalterado (False / localhost)
-   - [ ] Credenciais de produção fora do repo (.env + .env.example)
+   - [X] Credenciais de produção fora do repo (.env + .env.example)
+         FEITO 30/08: .env.example na raiz (template comentado; exceção
+         !.env.example no .gitignore) + seção "Configuração por ambiente"
+         no README. EVENTOS_OUT_DIR passou a ler de env também.
 
 ** FEITO [#A] BUG: "Gabarito Oficial Preliminar" vira gabarito_definitivo
    CLOSED: 2026-08-13
@@ -330,8 +315,11 @@
    - [X] Este backlog: docs/BACKLOG.org (conteúdo já em org-mode)
    - [X] README: atualizar TODAS as referências (hoje cita CONTRATO.md,
          schema/, consumer_teste.py com paths da raiz)
-   - [ ] Referências cruzadas dentro dos próprios docs (o comunicado cita
-         CONTRATO.md e consumer_teste.py)
+   - [X] Referências cruzadas dentro dos próprios docs (o comunicado cita
+         CONTRATO.md e consumer_teste.py) — FEITO 30/08: comunicado passa a
+         citar docs/CONTRATO.md e tests/consumer_teste.py; README:7 idem
+         (docs/CONTRATO.md). Demais docs conferidos (schema/, spiders/,
+         tests/ citados já estavam corretos).
    - [ ] Avisar o time LexLearn: o contrato mudou de path no repo
    - BOA TAREFA PARA COMEÇAR UMA SESSÃO (isolada, sem risco)
 
@@ -386,6 +374,29 @@
    consumidor de teste do LexLearn ouvindo.
 
 * Feito (histórico recente)
+** FEITO [#A] Watchlist YAML + scheduler (a automação)               :pipeline:
+   CLOSED: 2026-08-26
+   lexcorpus/scheduler.py: lê watchlist.yaml, calcula alvos vencidos pelo
+   cron de cada um (croniter — tick mais recente vs último disparo) e
+   dispara os crawls. Decisões que divergem do enunciado original:
+   - Disparo via SUBPROCESSO (`scrapy crawl ...`), não CrawlerProcess
+     em-processo: um crawl travado não derruba o scheduler nem os das
+     outras bancas, e cada crawl nasce com reactor limpo
+   - Último disparo em JSON próprio (./state/scheduler_state.json;
+     --state-file / LEXCORPUS_STATE_FILE; volume /state no Docker) —
+     o StateStore SQLite completo fica no item próprio (ciclo
+     preliminar→definitivo)
+   Mantido do enunciado: sequencial por banca + bancas em paralelo
+   (uma thread por grupo), trava anti-overlap por alvo, seção
+   "descoberta" suportada (os spiders de listagem em si são o item
+   "Spiders de descoberta"), alvo que falha não atualiza estado →
+   retenta na próxima verificação. Modos: --once (default; cron/
+   supercronic no container) e --loop SEG. Deps novas: croniter, PyYAML.
+   Watchlist corrigido na mesma passada: fcc params codigo→slug (o
+   spider aceita slug), comentários FGV/FCC/Cesgranrio atualizados
+   (spiders prontos; Cesgranrio via evento_id, sem esqueleto).
+   Testes: tests/test_scheduler.py (15 casos, subprocess mockado).
+   Dry-run real validado (só cebraspe ativo → 1 comando).
 ** FEITO ADR-0006: busca por palavra-chave + catálogo + orquestrador :pesquisa:
    CLOSED: 2026-08-25
    Entregue em 19/08 (buscador.py, catalogo.py, orquestrador.py +

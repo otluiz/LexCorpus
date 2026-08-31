@@ -54,7 +54,7 @@ RABBIT_URL = os.environ.get("RABBIT_URL", "amqp://guest:guest@localhost:5672/")
 RABBIT_EXCHANGE = "lexcorpus.events"
 RABBIT_ROUTING_DISPONIVEL = "concurso.disponivel"
 RABBIT_ROUTING_ATUALIZADO = "concurso.atualizado"
-EVENTOS_OUT_DIR = "eventos_debug"        # usado quando RABBIT_ENABLED=False
+EVENTOS_OUT_DIR = os.environ.get("EVENTOS_OUT_DIR", "eventos_debug")  # usado quando RABBIT_ENABLED=False
 
 # --- Cadeia de pipelines -----------------------------------------------------
 ITEM_PIPELINES = {

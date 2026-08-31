@@ -123,6 +123,7 @@ secrets/
 credentials.json
 .env
 .env.*
+!.env.example
 
 # ============================================
 # Config local

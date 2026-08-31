@@ -126,8 +126,8 @@ evento real do PRF 2021 (o array `arquivos` tem 20 itens; mostramos 2):
    docker run -d --name rabbitmq -p 5672:5672 -p 15672:15672 rabbitmq:3-management
    ```
 2. Declarem a fila de vocês e vinculem ao exchange `lexcorpus.events` com routing
-   key `concurso.#` (há um consumidor de exemplo em `consumer_teste.py` no repo do
-   LexCorpus — serve de ponto de partida).
+   key `concurso.#` (há um consumidor de exemplo em `tests/consumer_teste.py` no
+   repo do LexCorpus — serve de ponto de partida).
 3. Peçam para o LexCorpus publicar (ou rodem o crawl de teste). O evento chega na
    fila de vocês.
 4. Para cada arquivo do array: resolvam `pasta_uri` + `nome`, baixem/leiam do
@@ -156,10 +156,10 @@ Estes itens são conhecidos e serão tratados; documentados aqui por transparên
 
 ## Referências no repositório do LexCorpus
 
-- `CONTRATO.md` — o contrato de integração v2.0 (fonte da verdade)
+- `docs/CONTRATO.md` — o contrato de integração v2.0 (fonte da verdade)
 - `schema/evento.schema.json` — schema do evento (validem contra ele)
 - `schema/sidecar.schema.json` — schema do sidecar `.meta.json`
-- `consumer_teste.py` — consumidor de exemplo (ponto de partida para o de vocês)
+- `tests/consumer_teste.py` — consumidor de exemplo (ponto de partida para o de vocês)
 
 Dúvidas ou ajustes no contrato: como diz o §8, qualquer mudança é combinada entre
 os dois lados antes de virar código. Podem me chamar.

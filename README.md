@@ -4,7 +4,7 @@ Coletor "burro" que raspa PDFs de concursos e os entrega ao LexLearn por
 **arquivos em storage** + **eventos RabbitMQ** (padrão Claim Check). Toda a
 inteligência de domínio (parsing, normalização, classificação) é do LexLearn.
 
-O acordo entre os dois sistemas está em `CONTRATO.md` (v2.0). Os formatos de
+O acordo entre os dois sistemas está em `docs/CONTRATO.md` (v2.0). Os formatos de
 mensagem estão em `schema/evento.schema.json` e `schema/sidecar.schema.json`.
 
 ## Estrutura
@@ -25,6 +25,9 @@ mensagem estão em `schema/evento.schema.json` e `schema/sidecar.schema.json`.
       consulta.py            CLI de consulta ao storage: filtra os sidecars
                              por banca/concurso/cargo/papel e lista ou copia
                              os PDFs (lado leitor; não baixa nada da rede)
+      scheduler.py           a automação: lê watchlist.yaml, dispara os alvos
+                             cujo cron venceu (subprocesso por crawl, estado
+                             em JSON), sequencial por banca
       spiders/
         base.py              LexCorpusSpider — make_item (fábrica do
                              ArquivoItem do contrato v2.0)
@@ -67,6 +70,33 @@ em `eventos_debug/descoberta/`):
 
 Em produção: `RABBIT_ENABLED=True` no settings (ou via -s), e o publisher
 emite no exchange `lexcorpus.events` com routing key `concurso.disponivel`.
+
+## Rodar (modo automático — scheduler + watchlist)
+
+O `watchlist.yaml` (raiz) é a lista versionada de alvos: `banca`, `spider`,
+`params`, `cron`, `ativo`. O scheduler dispara `scrapy crawl` para cada alvo
+ativo cujo cron venceu — sequencial dentro de cada banca, bancas distintas
+em paralelo — e grava o último disparo num estado JSON (re-run sem tick
+novo não faz nada):
+
+    python -m lexcorpus.scheduler --once          # roda os vencidos e sai
+    python -m lexcorpus.scheduler --loop 60       # verifica a cada 60s
+    python -m lexcorpus.scheduler --once --dry-run  # só imprime os comandos
+
+O estado fica em `./state/scheduler_state.json` (override: `--state-file`
+ou `LEXCORPUS_STATE_FILE`; no Docker, apontar para o volume `/state`).
+Adicionar um concurso à automação = commit de uma entrada no watchlist.
+
+## Configuração por ambiente
+
+O `settings.py` lê tudo de variáveis de ambiente (os defaults cobrem dev local
+e Docker). O `.env.example` (raiz) é o template — copie para `.env` (não
+versionado) e ajuste por ambiente; credenciais de produção ficam só lá:
+
+- `LEXCORPUS_FILES_STORE` — onde os PDFs são gravados (ver seção Storage)
+- `RABBIT_ENABLED` / `RABBIT_URL` — publicação de eventos (produção)
+- `EVENTOS_OUT_DIR` — pasta dos eventos em modo debug (`RABBIT_ENABLED=False`)
+- `LEXCORPUS_WATCHLIST` / `LEXCORPUS_STATE_FILE` — scheduler
 
 ## Storage (onde os PDFs são gravados)
 
