@@ -190,11 +190,13 @@
      `scrapy crawl pci` sem resultado = este bloqueio em ação.
 
 * Pipeline / correções
-** EM-ANDAMENTO [#A] Config de ambiente: USER_AGENT real e RABBIT_URL por env
+** FEITO [#A] Config de ambiente: USER_AGENT real e RABBIT_URL por env
+   CLOSED: 2026-08-31
    Profissionalização básica antes de rodar automático contra as bancas.
-   - [ ] USER_AGENT hoje é "lexcorpus/0.1 (+contato@exemplo.br)" —
+   - [X] USER_AGENT hoje é "lexcorpus/0.1 (+contato@exemplo.br)" —
          placeholder. Colocar contato real (boa-fé com os sites + exigido
-         por vários ToS)
+         por vários ToS). FEITO 31/08: contato real (olto@ecomp.poli.br,
+         e-mail do autor no git config) em settings.py
    - [X] RABBIT_URL hardcoded amqp://guest:guest@localhost → ler de env
          (padrão FILES_STORE que já usa os.environ). FEITO 05/08 junto
          com RABBIT_ENABLED: settings.py lê os.environ.get para ambos;
@@ -309,7 +311,8 @@
    README.
 
 * Documentação
-** TODO [#A] Mover .md para docs/ e corrigir links
+** FEITO [#A] Mover .md para docs/ e corrigir links
+   CLOSED: 2026-08-31
    Decisão tomada: raiz só com README.md.
    - [X] git mv CONTRATO.md COMUNICADO_INTEGRACAO_OK.md docs/
    - [X] Este backlog: docs/BACKLOG.org (conteúdo já em org-mode)
@@ -320,8 +323,11 @@
          citar docs/CONTRATO.md e tests/consumer_teste.py; README:7 idem
          (docs/CONTRATO.md). Demais docs conferidos (schema/, spiders/,
          tests/ citados já estavam corretos).
-   - [ ] Avisar o time LexLearn: o contrato mudou de path no repo
-   - BOA TAREFA PARA COMEÇAR UMA SESSÃO (isolada, sem risco)
+   - [X] Avisar o time LexLearn: o contrato mudou de path no repo.
+         FEITO 31/08: referências atualizadas no LexLearn-v3 —
+         backend/app/workers/lexcorpus_consumer.py (comentário de cabeçalho)
+         e docs/architecture/decisions/ADR-011 passam a citar
+         docs/CONTRATO.md + schema/*.json no repo LexCorpus
 
 ** TODO [#B] Escrever os ADRs iniciais (docs/architecture/decisions/)
    O LexLearn já tem cultura de ADR; trazer para cá. Formato: 4 dígitos.
@@ -340,7 +346,8 @@
          override por regex de classe; mencionar a cadeia de técnicas
          com fallback como evolução prevista
 
-** EM-ANDAMENTO [#B] Atualizar README (novos spiders, automação, docs/)
+** FEITO [#B] Atualizar README (novos spiders, automação, docs/)
+   CLOSED: 2026-08-31
    Depois dos itens acima:
    - [X] Estrutura: adicionar scheduler.py, spiders/base.py,
          agregador_generico.py, estrategia.py, watchlist.yaml,
@@ -350,10 +357,12 @@
    - [X] Tabela de bancas suportadas e status (cebraspe ✅, fcc ✅
          gabaritos, fgv em construção, cesgranrio bloqueada, pci
          descoberta, estrategia/agregador_generico em validação) — 09/08
-   - [ ] Seção "Rodar": modo manual (scrapy crawl) E modo automático
+   - [X] Seção "Rodar": modo manual (scrapy crawl) E modo automático
          (scheduler + watchlist); modo container ao lado do LexLearn
-         (docker-compose.crawler.yml) — depende do scheduler existir
-   - [ ] Seção "Por onde começar": docs/CONTRATO.md → docs/BACKLOG.org →
+         (docker-compose.crawler.yml) — depende do scheduler existir.
+         FEITO 31/08: manual e automático já estavam; adicionada a seção
+         "Rodar (modo container — ao lado do LexLearn)"
+   - [X] Seção "Por onde começar": docs/CONTRATO.md → docs/BACKLOG.org →
          ADRs → schema/
 
 * Alinhar com o LexLearn (contrato §9 — não mexer unilateralmente)
