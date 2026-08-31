@@ -25,34 +25,34 @@ alvos:
     cron: "0 6 * * *"          # 1x/dia — ciclo encerrado
     ativo: true
 
-  # --- FGV — spider em construção (BACKLOG [#A]) ------------------------
+  # --- FGV — spider pronto (18/08) ----------------------------------------
   - banca: fgv
     spider: fgv
     params: {slug: dataprev26}
     cron: "0 */6 * * *"        # 4x/dia — ciclo preliminar→definitivo aberto
-    ativo: false               # ativar quando spiders/fgv.py existir
+    ativo: false               # spider validado; ativar p/ entrar na automação
 
-  # --- FCC — spider em construção (BACKLOG [#A]) ------------------------
+  # --- FCC — spider pronto (05/08; gabaritos oficiais) ---------------------
   - banca: fcc
     spider: fcc
-    params: {codigo: dpeba125}
+    params: {slug: dpeba125}
     cron: "0 6,18 * * *"       # 2x/dia
-    ativo: false               # ativar quando spiders/fcc.py existir
+    ativo: false               # spider validado; ativar p/ entrar na automação
 
-  # --- CESGRANRIO — bloqueado (WAF; precisa imagem Playwright) ----------
+  # --- CESGRANRIO — spider pronto (18/08, API pública do portal) -----------
   # Entrada abaixo gerada pela descoberta ADR-0006 (buscador + orquestrador):
   # Transpetro 2026, banca Cesgranrio (catálogo PCI confirma certames
-  # Cesgranrio×Transpetro 2006–2023). spiders/cesgranrio.py é ESQUELETO —
-  # validar PDF_SELECTOR contra o HTML real antes de ativar.
+  # Cesgranrio×Transpetro 2006–2023). O spider é real (sem Playwright):
+  # descobrir o evento_id em GET /api/PortalEventos antes de ativar.
   - banca: cesgranrio
     spider: cesgranrio
     organ: Transpetro
     concurso: transpetro_2026
     edital_data: "2026-08-01"
     cargos: [Analista de Sistemas, Administrador, Engenheiro de Produção]
-    params: {url: "https://www.cesgranrio.org.br/concurso/transpetro-2026/"}
+    params: {evento_id: "<id_em_/api/PortalEventos>"}
     cron: "0 */6 * * *"
-    ativo: false  # ESQUELETO: validar seletores antes de ativar
+    ativo: false  # falta o evento_id do certame (ver comentário acima)
 
 # Spiders de descoberta: percorrem SÓ listagens (sem baixar PDF) e propõem
 # novos alvos. Saída em eventos_debug/descoberta/; promoção ao watchlist
