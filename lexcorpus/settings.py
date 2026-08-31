@@ -12,7 +12,7 @@ NEWSPIDER_MODULE = "lexcorpus.spiders"
 
 # --- Educação / robustez -----------------------------------------------------
 ROBOTSTXT_OBEY = True                    # respeita robots.txt das bancas
-USER_AGENT = "lexcorpus/0.1 (+contato@exemplo.br)"
+USER_AGENT = "lexcorpus/0.1 (+olto@ecomp.poli.br)"
 
 # --- Concorrência e throttle (anti-bloqueio) ---------------------------------
 CONCURRENT_REQUESTS = 8
