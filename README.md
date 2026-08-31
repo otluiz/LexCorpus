@@ -87,6 +87,25 @@ O estado fica em `./state/scheduler_state.json` (override: `--state-file`
 ou `LEXCORPUS_STATE_FILE`; no Docker, apontar para o volume `/state`).
 Adicionar um concurso à automação = commit de uma entrada no watchlist.
 
+## Rodar (modo container — ao lado do LexLearn)
+
+Em produção o LexCorpus roda em container no projeto do LexLearn-v3, via
+override aditivo `docker-compose.crawler.yml` (na raiz do LexLearn-v3 —
+o base não é tocado). Mesma rede do projeto, mesmo bind `./data:/data`
+do worker, então o `pasta_uri` (`file:///data/raw/exams/...`) resolve
+identicamente nos dois lados. O RabbitMQ é infra do LexLearn: o coletor
+só conecta no broker existente, não sobe um próprio.
+
+    # no repo do LexLearn-v3 (LEXCORPUS_DIR no .env aponta para este repo)
+    docker compose -f docker-compose.base.yml -f docker-compose.crawler.yml \
+      build lexcorpus
+    docker compose -f docker-compose.base.yml -f docker-compose.crawler.yml \
+      run --rm lexcorpus crawl cebraspe -a slug=prf_21
+
+O serviço tem profile `crawler` (não sobe no `up` normal) e `restart: "no"`:
+crawl terminou, container morre. Suba a stack do LexLearn antes — o broker
+precisa estar de pé com uma fila vinculada ao exchange.
+
 ## Configuração por ambiente
 
 O `settings.py` lê tudo de variáveis de ambiente (os defaults cobrem dev local
