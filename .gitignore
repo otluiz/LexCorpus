@@ -82,6 +82,7 @@ htmlcov/
 .mypy_cache/
 .dmypy.json
 dmypy.json
+tmp/
 
 # ============================================
 # Node.js / Frontend (caso surja um frontend)
