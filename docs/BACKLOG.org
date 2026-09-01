@@ -59,7 +59,8 @@
     cache. Política de expurgo, se um dia existir, será objeto de estudo.
 
 * Em andamento / próximos
-** TODO [#A] StateStore + ciclo preliminar→definitivo (contrato §6.11)
+** FEITO [#A] StateStore + ciclo preliminar→definitivo (contrato §6.11)
+   CLOSED: 2026-08-31
    O contrato modela o ciclo (vigente, substituido_por, concurso.
    atualizado) mas NADA disso está implementado: hoje toda coleta publica
    concurso.disponivel com vigente=true, e a routing key
@@ -68,20 +69,28 @@
    para decisão do administrador (gate 18/08) — mas nada sabe dizer "o
    definitivo chegou".
    Solução: SQLite pequeno no volume de estado.
-   - [ ] Tabela arquivo_visto(banca, concurso, nome, papel, checksum,
-         vigente, first_seen, last_seen)
-   - [ ] EventoRabbitPipeline consulta o estado antes de agregar:
+   - [X] Tabela arquivo_visto(banca, concurso, nome, papel, checksum,
+         vigente, first_seen, last_seen) — FEITO 31/08:
+         lexcorpus/statestore.py (WAL + busy_timeout para os crawls
+         paralelos do scheduler; caminho via LEXCORPUS_STATE_DB)
+   - [X] EventoRabbitPipeline consulta o estado antes de agregar:
          concurso/arquivos novos → concurso.disponivel (como hoje);
          surgiu gabarito_definitivo onde havia preliminar → marca o
          preliminar vigente=false + substituido_por e publica o conjunto
-         como concurso.atualizado; nada mudou → não publica nada
-   - [ ] Idempotência de verdade do lado produtor (não depender só do
-         event_id no consumidor)
-   - [ ] Re-run diário fica barato e seguro (só publica delta)
+         como concurso.atualizado; nada mudou → não publica nada.
+         FEITO 31/08: diff em _fechar_concurso (pipelines.py); matching
+         preliminar↔definitivo por interseção de cargos ("*" cobre tudo)
+         + tipo_prova; sidecar do preliminar regravado (só metadado)
+   - [X] Idempotência de verdade do lado produtor (não depender só do
+         event_id no consumidor) — "nada mudou → não publica nada"
+   - [X] Re-run diário fica barato e seguro (só publica delta)
    - ALINHAR com o LexLearn: a semântica do concurso.atualizado está no
      contrato; validar o primeiro evento real com um consumidor de teste
+     → segue ABERTO no item §9 "Validar o primeiro concurso.atualizado real"
    - Fecha o ponto aberto "Ciclo preliminar → definitivo" do
      docs/COMUNICADO_INTEGRACAO_OK.md
+   Testes: tests/test_statestore.py (5 casos, sem rede/RabbitMQ; eventos
+   validados contra o schema). 88 testes verdes em 31/08.
 
 ** TODO [#B] Migrar pci.py e fcc.py para heuristics.py (ADR-0005)
    Plano formalizado no ADR-0005 (09/08): ordem, pré-requisitos
@@ -261,7 +270,8 @@
    autoridade para reclassificar. Revisitar só se virar ruído real.
 
 * Docker / profissionalização
-** TODO [#A] Dockerfile multi-stage (base + base-playwright)
+** FEITO [#A] Dockerfile multi-stage (base + base-playwright)
+   CLOSED: 2026-08-31
    UMA imagem para todo o projeto; um segundo target adiciona Chromium+
    Playwright só para os spiders que precisam (Cesgranrio; PCI se um dia
    for reaberto). Imagem principal fica enxuta.
@@ -270,12 +280,19 @@
    precisa de browser; o stage playwright fica só para o PCI, se reaberto.
    - [X] Stage base (versão inicial 05/08): python:3.11-slim +
          requirements.txt + código, ENTRYPOINT scrapy, .dockerignore
-         excluindo venv/.git/eventos_debug
-   - [ ] Stage playwright: base + playwright install --with-deps chromium
+         excluindo venv/.git/eventos_debug. NOTA 31/08: o .dockerignore
+         não existia de fato no repo — criado agora (.git, venv,
+         eventos_debug, state, tmp, docs, legado)
+   - [X] Stage playwright: base + playwright install --with-deps chromium.
+         FEITO 31/08: Dockerfile multi-stage — base (default, == final),
+         playwright (--target playwright), final. O compose do LexLearn-v3
+         não passa target, então o default segue enxuto
    - [X] Volume /data/raw/exams (contrato: o LexLearn monta o mesmo) —
          validado no compose de integração
-   - [ ] Volume /state (SQLite do StateStore) e /app/watchlist.yaml
-         (ou copiar no build e permitir override por volume)
+   - [X] Volume /state (SQLite do StateStore) e /app/watchlist.yaml
+         (ou copiar no build e permitir override por volume).
+         FEITO 31/08: VOLUME /state + ENV LEXCORPUS_STATE_DB e
+         LEXCORPUS_STATE_FILE apontando para lá
 
 ** EM-ANDAMENTO [#A] docker-compose de dev/prod (scheduler + rabbitmq + volumes)
    Containers por FUNÇÃO, todos da mesma imagem (decisão: monolito

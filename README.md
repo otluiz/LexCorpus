@@ -28,6 +28,9 @@ mensagem estão em `schema/evento.schema.json` e `schema/sidecar.schema.json`.
       scheduler.py           a automação: lê watchlist.yaml, dispara os alvos
                              cujo cron venceu (subprocesso por crawl, estado
                              em JSON), sequencial por banca
+      statestore.py          SQLite com o que cada concurso já publicou:
+                             re-run publica só o delta e o definitivo
+                             arquiva o preliminar (contrato §6.11)
       spiders/
         base.py              LexCorpusSpider — make_item (fábrica do
                              ArquivoItem do contrato v2.0)
@@ -86,6 +89,14 @@ novo não faz nada):
 O estado fica em `./state/scheduler_state.json` (override: `--state-file`
 ou `LEXCORPUS_STATE_FILE`; no Docker, apontar para o volume `/state`).
 Adicionar um concurso à automação = commit de uma entrada no watchlist.
+
+Cada crawl também consulta o **StateStore** (`state/lexcorpus_state.db`,
+override: `LEXCORPUS_STATE_DB`) — um SQLite com o que cada concurso já
+publicou. É ele quem faz o re-run diário ser barato: nada mudou, **nada é
+publicado**. E é ele quem implementa o ciclo preliminar→definitivo do
+contrato (§6.11): quando o gabarito definitivo aparece num crawl, o
+preliminar é arquivado (`vigente: false` + `substituido_por`, no evento e no
+sidecar — o PDF fica intacto) e o conjunto sai como `concurso.atualizado`.
 
 ## Rodar (modo container — ao lado do LexLearn)
 

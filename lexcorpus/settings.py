@@ -46,6 +46,13 @@ STORAGE_URI_SCHEME = "file://"
 # (ver LexCorpusFilesPipeline._onsuccess em pipelines.py)
 FILES_EXPIRES = 700
 
+# --- StateStore (memória entre crawls — contrato §6.11) ----------------------
+# SQLite com o que cada concurso já publicou: é o que permite distinguir
+# "novo" (concurso.disponivel), "mudou" (concurso.atualizado — ex.: saiu o
+# gabarito definitivo e o preliminar é arquivado) e "nada mudou" (não publica;
+# re-run diário fica gratuito). No Docker, apontar para o volume /state.
+LEXCORPUS_STATE_DB = os.environ.get("LEXCORPUS_STATE_DB", "state/lexcorpus_state.db")
+
 # --- RabbitMQ ----------------------------------------------------------------
 #RABBIT_ENABLED = True                   # True em produção; False grava evento em disco
 #RABBIT_URL = "amqp://guest:guest@localhost:5672/"
