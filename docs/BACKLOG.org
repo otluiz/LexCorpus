@@ -301,8 +301,33 @@
          na raiz do LexLearn-v3 — override aditivo (base intocado),
          profile "crawler", mesma rede do projeto lexlearn-v3, mesmo
          bind ./data:/data do worker, RABBIT_URL=rabbitmq:5672
-   - [ ] LEXCORPUS_DIR no .env do LexLearn-v3 (caminho relativo até o
+   - [X] LEXCORPUS_DIR no .env do LexLearn-v3 (caminho relativo até o
          repo LexCorpus, ex.: ../../LexCorpus)
+         FEITO: =.env:109= do LexLearn-v3 = =../../LexCorpus=. O DEFAULT
+         do compose (=${LEXCORPUS_DIR:-../LexCorpus}=) aponta para
+         =LexLearn/LexCorpus=, que NÃO existe nesta máquina — quem clonar
+         sem o =.env= quebra no build, e a mensagem não diz por quê.
+   - [X] Volume =lexcorpus-state= PROVADO EM DADO REAL (01/09). A linha
+         =lexcorpus-state:/state= entrou no =docker-compose.crawler.yml=
+         em 31/08 (LexLearn-v3 =d50846d=); hoje o volume foi lido:
+         | linhas em =arquivo_visto= | 20 (cebraspe/prf_21) |
+         | =first_seen= distintos    | 1 — 01:40:39 |
+         | =last_seen= distintos     | 1 — 01:45:40 |
+         UM =first_seen= e UM =last_seen=, cinco minutos entre eles: o
+         segundo =run --rm= ACHOU as 20 linhas do primeiro e só avançou o
+         =last_seen=. Volume não-persistido daria banco novo e vazio, com
+         =first_seen == last_seen=. Não é plausibilidade de YAML: são dois
+         contêineres efêmeros e a memória entre eles.
+         E o CICLO §6.11 rodou no caminho de produção, não em teste: 3
+         gabaritos preliminares com =vigente=0= e
+         =substituido_por=Gab_Definitivo_085_PRFCF_001_01.pdf=.
+         A cadeia do caminho foi conferida DENTRO do contêiner, não
+         suposta — =scrapy settings --get LEXCORPUS_STATE_DB= devolve
+         =/state/lexcorpus_state.db= (Dockerfile ENV -> =settings.py=
+         =os.environ= -> setting do Scrapy que o pipeline lê). Importa
+         porque o pipeline lê SETTING, não env: se o =settings.py= não
+         fizesse a ponte, o ENV do Dockerfile seria decoração e o estado
+         cairia em =/app/state=, fora do volume, calado.
    - [ ] Teste e2e via compose: crawl fcc → evento consumido pelo worker
          do LexLearn
    - [ ] Serviço scheduler: command python -m lexcorpus.scheduler;
