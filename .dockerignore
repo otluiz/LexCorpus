@@ -1,0 +1,22 @@
+# .dockerignore — o que NÃO entra no contexto de build da imagem LexCorpus.
+# Sem isso, venv/ e .git/ iriam para o daemon (contexto lento) e para a
+# imagem via "COPY . ." (imagem inchada e com lixo de dev).
+
+.git
+venv
+__pycache__
+*.pyc
+.pytest_cache
+
+# artefatos locais de execução (eventos de debug, estado, rascunhos)
+eventos_debug
+state
+tmp
+
+# docs e material de referência — a imagem só precisa do código + schemas
+docs
+legado
+cli
+README.md
+README.html
+*.org
