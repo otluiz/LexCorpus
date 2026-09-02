@@ -1,47 +1,77 @@
-# docker-compose.crawler.yml — LexCorpus (coletor) ao lado do LexLearn-v3
+# docker-compose.crawler.yml — LexCorpus (coletor)
 #
-# Vai na RAIZ do repositório LexLearn-v3 (ao lado do docker-compose.base.yml).
-# NÃO modifica o docker-compose.base.yml: é um override aditivo.
+# Vai na RAIZ do repositório LexCorpus.
 #
-# Premissas (as duas valem pelo desenho do contrato v2.0):
-#   1. REDE: o projeto compose é "lexlearn-v3" (definido no base), então este
-#      serviço entra na MESMA rede default e resolve "rabbitmq" pelo nome.
-#   2. STORAGE: o worker do LexLearn monta ./data:/data. Montamos o MESMO
-#      ./data:/data aqui — assim o pasta_uri "file:///data/raw/exams/..."
-#      publicado no evento resolve identicamente no container do worker.
+# MUDOU DE CASA em 01/09, e a razão é de arquitetura, não de arrumação. O
+# ADR-0006 do LexLearn prevê DOIS pontos de contato entre os projetos, ambos
+# de runtime e anônimos: o DIRETÓRIO compartilhado e a FILA. Enquanto este
+# arquivo morava no LexLearn havia um TERCEIRO, de BUILD e contra o FONTE — o
+# `build.context` apontava para a árvore do LexCorpus, e o LexLearn compilava
+# o outro projeto lendo o Dockerfile dele.
 #
-# Uso (sempre com o base na frente, para herdar o nome do projeto e a rede):
+# A DIREÇÃO DA DEPENDÊNCIA DECIDE ONDE CADA CAMINHO PODE MORAR. O coletor
+# PRECISA saber onde fica o diretório compartilhado — isso É o contrato dele.
+# O LexLearn saber onde ficava o REPOSITÓRIO do coletor não era contrato
+# nenhum. Por isso o caminho do repo sumiu (virou `.`) e o caminho do storage
+# nasceu aqui, que é o lado certo.
+#
+# O QUE CONTINUA COMPARTILHADO, e deve continuar: o diretório e a fila. O alvo
+# nunca foi os dois projetos não se falarem — foi falarem só pelos canais
+# previstos. Isolamento total quebraria a integração: o coletor escreveria
+# PDFs que ninguém leria.
+#
+# ---------------------------------------------------------------------------
+# COMO RODAR
+#
+# O broker é o do LexLearn — é o worker DELE que consome os eventos. Por isso
+# este arquivo entra na rede do projeto do LexLearn, declarada como externa em
+# docker-compose.lexlearn.yml (ao lado deste).
+#
+#   # 1. a stack do LexLearn precisa estar DE PÉ (o broker e a fila são dela)
+#   #    exchange sem fila vinculada DESCARTA a mensagem, e isso não dá erro
+#
+#   # 2. onde fica o diretório compartilhado, visto DESTE repositório.
+#   #    CONFIRA O CAMINHO ANTES DE COPIAR: nesta máquina o LexLearn-v3 mora
+#   #    um nível mais fundo que o LexCorpus, e o "../LexLearn-v3/data" que
+#   #    parece óbvio aponta para uma pasta que não existe. Foi esse mesmo
+#   #    tipo de caminho plausível-e-errado que motivou o `:?` lá embaixo.
+#   export LEXCORPUS_STORAGE_DIR=../LexLearn/LexLearn-v3/data
 #
 #   # build da imagem do coletor
-#   docker compose -f docker-compose.base.yml -f docker-compose.crawler.yml build lexcorpus
+#   docker compose -f docker-compose.crawler.yml -f docker-compose.lexlearn.yml \
+#     build lexcorpus
 #
 #   # sanity check: lista os spiders disponíveis
-#   docker compose -f docker-compose.base.yml -f docker-compose.crawler.yml \
+#   docker compose -f docker-compose.crawler.yml -f docker-compose.lexlearn.yml \
 #     run --rm lexcorpus list
 #
 #   # crawl FCC (gabaritos oficiais)
-#   docker compose -f docker-compose.base.yml -f docker-compose.crawler.yml \
+#   docker compose -f docker-compose.crawler.yml -f docker-compose.lexlearn.yml \
 #     run --rm lexcorpus crawl fcc -a slug=dpeba125 -s ROBOTSTXT_OBEY=False
 #
 #   # crawl Cebraspe
-#   docker compose -f docker-compose.base.yml -f docker-compose.crawler.yml \
+#   docker compose -f docker-compose.crawler.yml -f docker-compose.lexlearn.yml \
 #     run --rm lexcorpus crawl cebraspe -a slug=prf_21
 #
 #   # crawl PCI Concursos
-#   docker compose -f docker-compose.base.yml -f docker-compose.crawler.yml \
+#   docker compose -f docker-compose.crawler.yml -f docker-compose.lexlearn.yml \
 #     run --rm lexcorpus crawl pci \
 #       -a url="https://www.pciconcursos.com.br/provas/download/..." \
 #       -a banca="FCC" -a concurso="DPE-BA 2025" -a cargo="Defensor Público"
 #
-# IMPORTANTE: suba a stack do LexLearn ANTES (o coletor precisa do RabbitMQ
-# de pé e de uma fila vinculada ao exchange — o worker do LexLearn já cria
-# a dela; exchange sem fila vinculada descarta a mensagem).
+# SEM ESPERA PELO BROKER, e é uma perda consciente: o `depends_on:
+# service_healthy` que este arquivo tinha só funcionava quando o RabbitMQ era
+# do MESMO projeto compose. Agora ele é de outro, e depender de serviço
+# inexistente derruba o projeto inteiro ("depends on undefined service"). A
+# garantia passa a ser o passo 1 acima. Se o broker não estiver de pé o crawl
+# falha na publicação — falha ruidosa, e `restart: "no"`: rode de novo.
+# ---------------------------------------------------------------------------
 
 services:
   lexcorpus:
     build:
-      # caminho do repo do LexCorpus, relativo à pasta do LexLearn-v3
-      context: ${LEXCORPUS_DIR:-../LexCorpus}
+      # o próprio repositório: este arquivo mora na raiz dele agora
+      context: .
       dockerfile: Dockerfile
     profiles: ["crawler"]        # nunca sobe com o 'up' normal; só via run --rm
     environment:
@@ -51,11 +81,25 @@ services:
       RABBIT_ENABLED: "true"
       RABBIT_URL: amqp://guest:guest@rabbitmq:5672/
     volumes:
-      - ./data:/data             # MESMO bind do serviço 'worker' do base
+      # O DIRETÓRIO COMPARTILHADO — o ponto de contato do ADR-0006. Dentro do
+      # container ele é sempre /data, porque o `pasta_uri` publicado no evento
+      # ("file:///data/raw/exams/...") tem de resolver IDENTICAMENTE no
+      # container do worker do LexLearn, que monta o mesmo lugar em /data.
+      #
+      # A forma `:?` em vez de um default É DELIBERADA, e vem de uma armadilha
+      # já paga: a versão anterior deste arquivo trazia
+      # `${LEXCORPUS_DIR:-../LexCorpus}`, um default que NÃO EXISTIA na máquina
+      # onde rodava. Com o .env presente funcionava; sem ele o build quebrava
+      # sem dizer por quê. Caminho errado que se cala é pior que variável
+      # ausente que grita — aqui o compose recusa com a mensagem.
+      #
+      # SINTAXE LONGA porque a curta quebra: os dois-pontos da mensagem de erro
+      # do `:?` seriam lidos como o separador host:container, e o compose
+      # reclamava de "missing a mount target" em vez da variável ausente.
+      - type: bind
+        source: ${LEXCORPUS_STORAGE_DIR:?defina LEXCORPUS_STORAGE_DIR com o diretório de storage compartilhado}
+        target: /data
       - lexcorpus-state:/state   # StateStore SQLite + scheduler_state (§6.11)
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
     # sem restart: um crawl termina, o container morre. Falhou? rode de novo.
     restart: "no"
 
