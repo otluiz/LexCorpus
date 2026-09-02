@@ -1,0 +1,63 @@
+# docker-compose.crawler.yml — LexCorpus (coletor) ao lado do LexLearn-v3
+#
+# Vai na RAIZ do repositório LexLearn-v3 (ao lado do docker-compose.base.yml).
+# NÃO modifica o docker-compose.base.yml: é um override aditivo.
+#
+# Premissas (as duas valem pelo desenho do contrato v2.0):
+#   1. REDE: o projeto compose é "lexlearn-v3" (definido no base), então este
+#      serviço entra na MESMA rede default e resolve "rabbitmq" pelo nome.
+#   2. STORAGE: o worker do LexLearn monta ./data:/data. Montamos o MESMO
+#      ./data:/data aqui — assim o pasta_uri "file:///data/raw/exams/..."
+#      publicado no evento resolve identicamente no container do worker.
+#
+# Uso (sempre com o base na frente, para herdar o nome do projeto e a rede):
+#
+#   # build da imagem do coletor
+#   docker compose -f docker-compose.base.yml -f docker-compose.crawler.yml build lexcorpus
+#
+#   # sanity check: lista os spiders disponíveis
+#   docker compose -f docker-compose.base.yml -f docker-compose.crawler.yml \
+#     run --rm lexcorpus list
+#
+#   # crawl FCC (gabaritos oficiais)
+#   docker compose -f docker-compose.base.yml -f docker-compose.crawler.yml \
+#     run --rm lexcorpus crawl fcc -a slug=dpeba125 -s ROBOTSTXT_OBEY=False
+#
+#   # crawl Cebraspe
+#   docker compose -f docker-compose.base.yml -f docker-compose.crawler.yml \
+#     run --rm lexcorpus crawl cebraspe -a slug=prf_21
+#
+#   # crawl PCI Concursos
+#   docker compose -f docker-compose.base.yml -f docker-compose.crawler.yml \
+#     run --rm lexcorpus crawl pci \
+#       -a url="https://www.pciconcursos.com.br/provas/download/..." \
+#       -a banca="FCC" -a concurso="DPE-BA 2025" -a cargo="Defensor Público"
+#
+# IMPORTANTE: suba a stack do LexLearn ANTES (o coletor precisa do RabbitMQ
+# de pé e de uma fila vinculada ao exchange — o worker do LexLearn já cria
+# a dela; exchange sem fila vinculada descarta a mensagem).
+
+services:
+  lexcorpus:
+    build:
+      # caminho do repo do LexCorpus, relativo à pasta do LexLearn-v3
+      context: ${LEXCORPUS_DIR:-../LexCorpus}
+      dockerfile: Dockerfile
+    profiles: ["crawler"]        # nunca sobe com o 'up' normal; só via run --rm
+    environment:
+      # storage canônico do contrato: mesmo path que o worker do LexLearn vê
+      LEXCORPUS_FILES_STORE: /data/raw/exams
+      # produção: publica de verdade no broker do projeto (não em eventos_debug)
+      RABBIT_ENABLED: "true"
+      RABBIT_URL: amqp://guest:guest@rabbitmq:5672/
+    volumes:
+      - ./data:/data             # MESMO bind do serviço 'worker' do base
+      - lexcorpus-state:/state   # StateStore SQLite + scheduler_state (§6.11)
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    # sem restart: um crawl termina, o container morre. Falhou? rode de novo.
+    restart: "no"
+
+volumes:
+  lexcorpus-state:               # sobrevive aos crawls efêmeros (run --rm)
