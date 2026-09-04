@@ -301,12 +301,40 @@
          na raiz do LexLearn-v3 — override aditivo (base intocado),
          profile "crawler", mesma rede do projeto lexlearn-v3, mesmo
          bind ./data:/data do worker, RABBIT_URL=rabbitmq:5672
+         SUPERADO 01/09: o arquivo mudou de casa — ver o checkbox
+         "COMPOSE MUDOU DE CASA" abaixo
    - [X] LEXCORPUS_DIR no .env do LexLearn-v3 (caminho relativo até o
          repo LexCorpus, ex.: ../../LexCorpus)
          FEITO: =.env:109= do LexLearn-v3 = =../../LexCorpus=. O DEFAULT
          do compose (=${LEXCORPUS_DIR:-../LexCorpus}=) aponta para
          =LexLearn/LexCorpus=, que NÃO existe nesta máquina — quem clonar
          sem o =.env= quebra no build, e a mensagem não diz por quê.
+         MORTO 01/09: a variável deixou de existir na mudança de casa
+         (build.context virou =.=)
+   - [X] COMPOSE MUDOU DE CASA (01/09): docker-compose.crawler.yml veio
+         do LexLearn para a raiz DESTE repo, e nasceu ao lado o
+         docker-compose.lexlearn.yml (a ponte). Razão de arquitetura:
+         o ADR-0006 prevê DOIS pontos de contato de runtime — o
+         diretório compartilhado e a fila; o build.context apontando
+         para o fonte era um TERCEIRO, de build, e morreu:
+         - build.context: =${LEXCORPUS_DIR:-../LexCorpus}= → =.=
+         - storage: =./data:/data= → bind em sintaxe longa com
+           =${LEXCORPUS_STORAGE_DIR:?...}= — SEM DEFAULT, de propósito:
+           variável ausente grita, caminho errado se calaria (a forma
+           curta quebrava: os dois-pontos do =:?= viravam separador
+           host:container)
+         - =depends_on: rabbitmq= REMOVIDO — o broker é de outro
+           projeto compose; depender de serviço inexistente derruba o
+           projeto inteiro ("depends on undefined service"). Sem espera
+           pelo broker: a garantia é a pré-condição documentada (stack
+           do LexLearn de pé antes)
+         - docker-compose.lexlearn.yml: =name: lexcorpus= (o volume de
+           estado é sempre =lexcorpus_lexcorpus-state=, sem depender do
+           nome do diretório) + rede default externa
+           (=lexlearn-v3_default= — resolve "rabbitmq" no broker de lá)
+         Validado com =docker compose config= nos dois casos (sem a
+         variável recusa nomeando-a; com ela resolve tudo) — reverificado
+         em 04/09, com o mesmo resultado.
    - [X] Volume =lexcorpus-state= PROVADO EM DADO REAL (01/09). A linha
          =lexcorpus-state:/state= entrou no =docker-compose.crawler.yml=
          em 31/08 (LexLearn-v3 =d50846d=); hoje o volume foi lido:
@@ -622,6 +650,11 @@
    item multi-stage.
 ** FEITO docker-compose.crawler.yml (integração LexLearn-v3)          :docker:
    CLOSED: 2026-08-05
+   ERRATA (01/09): o arquivo mudou de casa — desde 01/09 vive na raiz
+   DESTE repo, com o docker-compose.lexlearn.yml de ponte ao lado (e o
+   LEXCORPUS_DIR morreu). Registro original mantido abaixo; o estado
+   vigente está no checkbox "COMPOSE MUDOU DE CASA" do item
+   "docker-compose de dev/prod".
    Override aditivo na raiz do LexLearn-v3 — docker-compose.base.yml
    intocado. Profile "crawler" (não sobe com o up normal), mesma rede
    do projeto lexlearn-v3 (resolve rabbitmq pelo nome), mesmo bind
