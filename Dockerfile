@@ -9,11 +9,14 @@
 #                 (nenhum precisa de browser hoje — Cesgranrio usa API JSON)
 #   playwright -> base + Chromium/Playwright, só para spiders com WAF/JS
 #                 (PCI, se reaberto). Não é buildada por default.
-#   final      -> o default de build (== base). O compose do LexLearn-v3
-#                 não passa --target, então o ÚLTIMO estágio é o que vale.
+#   final      -> o default de build (== base). O compose não passa
+#                 --target, então o ÚLTIMO estágio é o que vale.
 #
-# Build (a partir da pasta do LexLearn-v3, via compose):
-#   docker compose -f docker-compose.base.yml -f docker-compose.crawler.yml build lexcorpus
+# Build (a partir DESTA pasta, via compose — o compose mudou de casa em
+# 01/09: era do LexLearn, agora vive aqui, com o docker-compose.lexlearn.yml
+# de ponte):
+#   export LEXCORPUS_STORAGE_DIR=../LexLearn/LexLearn-v3/data  # confira o caminho
+#   docker compose -f docker-compose.crawler.yml -f docker-compose.lexlearn.yml build lexcorpus
 #
 # Build do target playwright (quando algum spider precisar de browser):
 #   docker build --target playwright -t lexcorpus:playwright .
@@ -21,8 +24,8 @@
 # Uso direto (sem compose):
 #   docker build -t lexcorpus .
 #   docker run --rm --network lexlearn-v3_default \
-#     -v "$PWD/../LexLearn-v3/data:/data" \
-#     -v lexcorpus_state:/state \
+#     -v "$PWD/../LexLearn/LexLearn-v3/data:/data" \
+#     -v lexcorpus_lexcorpus-state:/state \
 #     -e RABBIT_ENABLED=true \
 #     -e RABBIT_URL=amqp://guest:guest@rabbitmq:5672/ \
 #     lexcorpus crawl fcc -a slug=dpeba125 -s ROBOTSTXT_OBEY=False
