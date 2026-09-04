@@ -100,22 +100,27 @@ sidecar — o PDF fica intacto) e o conjunto sai como `concurso.atualizado`.
 
 ## Rodar (modo container — ao lado do LexLearn)
 
-Em produção o LexCorpus roda em container no projeto do LexLearn-v3, via
-override aditivo `docker-compose.crawler.yml` (na raiz do LexLearn-v3 —
-o base não é tocado). Mesma rede do projeto, mesmo bind `./data:/data`
-do worker, então o `pasta_uri` (`file:///data/raw/exams/...`) resolve
-identicamente nos dois lados. O RabbitMQ é infra do LexLearn: o coletor
-só conecta no broker existente, não sobe um próprio.
+Em produção o LexCorpus roda em container a partir DESTE repositório, via
+`docker-compose.crawler.yml` + `docker-compose.lexlearn.yml` (a ponte:
+nome de projeto fixo `lexcorpus` e a rede do LexLearn declarada como
+externa). O container monta o storage compartilhado em `/data` (definido
+por `LEXCORPUS_STORAGE_DIR`), então o `pasta_uri`
+(`file:///data/raw/exams/...`) resolve identicamente nos dois lados. O
+RabbitMQ é infra do LexLearn: o coletor só conecta no broker existente,
+não sobe um próprio.
 
-    # no repo do LexLearn-v3 (LEXCORPUS_DIR no .env aponta para este repo)
-    docker compose -f docker-compose.base.yml -f docker-compose.crawler.yml \
+    # neste repo; a stack do LexLearn precisa estar de pé (o broker é dela)
+    export LEXCORPUS_STORAGE_DIR=../LexLearn/LexLearn-v3/data  # confira o caminho
+    docker compose -f docker-compose.crawler.yml -f docker-compose.lexlearn.yml \
       build lexcorpus
-    docker compose -f docker-compose.base.yml -f docker-compose.crawler.yml \
+    docker compose -f docker-compose.crawler.yml -f docker-compose.lexlearn.yml \
       run --rm lexcorpus crawl cebraspe -a slug=prf_21
 
 O serviço tem profile `crawler` (não sobe no `up` normal) e `restart: "no"`:
-crawl terminou, container morre. Suba a stack do LexLearn antes — o broker
-precisa estar de pé com uma fila vinculada ao exchange.
+crawl terminou, container morre. `LEXCORPUS_STORAGE_DIR` não tem default de
+propósito: sem ela o compose recusa, nomeando a variável. Suba a stack do
+LexLearn antes — o broker precisa estar de pé com uma fila vinculada ao
+exchange (não há `depends_on`: o broker é de outro projeto compose).
 
 ## Configuração por ambiente
 
@@ -127,6 +132,9 @@ versionado) e ajuste por ambiente; credenciais de produção ficam só lá:
 - `RABBIT_ENABLED` / `RABBIT_URL` — publicação de eventos (produção)
 - `EVENTOS_OUT_DIR` — pasta dos eventos em modo debug (`RABBIT_ENABLED=False`)
 - `LEXCORPUS_WATCHLIST` / `LEXCORPUS_STATE_FILE` — scheduler
+- `LEXCORPUS_STORAGE_DIR` — só compose (não é lida pelo settings.py):
+  diretório de storage compartilhado, montado em `/data` no container.
+  Sem default de propósito — ver "Rodar (modo container)"
 
 ## Storage (onde os PDFs são gravados)
 
