@@ -1,13 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://lexlearn/lexcorpus/sidecar.schema.json",
-  "title": "Sidecar de metadado de origem (.meta.json) - v2",
+  "title": "Sidecar de metadado de origem (.meta.json) - v2.1",
   "description": "Escrito pelo LexCorpus ao lado de cada PDF. Tratado pelo LexLearn como entrada NAO-CONFIAVEL: validado antes de qualquer uso. v2.0 alinhado ao evento v2.",
   "type": "object",
   "required": ["schema_version", "arquivo", "papel", "cargos", "checksum_sha256", "origem"],
   "additionalProperties": false,
   "properties": {
-    "schema_version": { "type": "string", "const": "2.0" },
+    "schema_version": { "type": "string", "enum": ["2.0", "2.1"] },
     "arquivo": {
       "type": "string",
       "minLength": 1,
@@ -28,6 +28,11 @@
       "type": ["string", "null"],
       "description": "Versao/tipo da prova. null se nao ha tipos."
     },
+    "caderno": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "description": "OPCIONAL (v2.1). Codigo do caderno como a banca o imprime no PDF (ex: 'BACEN13_002_04'); casa prova e bloco do gabarito. Na Cebraspe o rotulo do cargo nao identifica o caderno; este codigo sim. So letras, digitos, '_' e '-'."
+    },
     "multi_cargo": {
       "type": "boolean",
       "default": false
@@ -37,10 +42,11 @@
       "description": "Para multi_cargo: onde cada cargo esta no arquivo. Declarar o que for extraivel.",
       "items": {
         "type": "object",
-        "required": ["cargo"],
+        "anyOf": [{ "required": ["cargo"] }, { "required": ["caderno"] }],
         "additionalProperties": false,
         "properties": {
           "cargo": { "type": "string", "minLength": 1 },
+          "caderno": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$" },
           "pagina_inicio": { "type": "integer", "minimum": 1 },
           "pagina_fim": { "type": "integer", "minimum": 1 },
           "ancora": { "type": "string" }

@@ -14,6 +14,8 @@ Princípios do contrato honrados aqui:
   §6.9  pasta plana, sem subpastas
   §6.11 ciclo preliminar->definitivo via StateStore (lexcorpus/statestore.py)
   §7    ponteiro é URI com esquema (file://)
+  §4    versão emitida = LEXCORPUS_CONTRATO_VERSAO (2.0 | 2.1); em 2.0 o
+        campo `caderno` (novo na 2.1) é retirado da saída
 """
 from __future__ import annotations
 
@@ -30,6 +32,36 @@ from scrapy.pipelines.files import FileException, FilesPipeline
 
 from .statestore import StateStore
 from .util import sha256_file, atomic_write_bytes
+
+
+VERSOES_CONTRATO = ("2.0", "2.1")
+
+
+def versao_contrato(settings) -> str:
+    versao = settings.get("LEXCORPUS_CONTRATO_VERSAO", "2.0")
+    if versao not in VERSOES_CONTRATO:
+        raise ValueError(f"LEXCORPUS_CONTRATO_VERSAO={versao!r}; "
+                         f"aceitas: {', '.join(VERSOES_CONTRATO)}")
+    return versao
+
+
+def ajustar_a_versao(arq: dict, versao: str) -> dict:
+    """Retira do arquivo (evento ou sidecar) o que a versão não conhece.
+
+    2.0 não tem `caderno`: sai do arquivo e dos segmentos; segmento que só
+    tinha caderno (sem cargo) seria inválido em 2.0 e é descartado.
+    """
+    if versao != "2.0":
+        return arq
+    arq.pop("caderno", None)
+    if arq.get("segmentos"):
+        segs = [{k: v for k, v in s.items() if k != "caderno"}
+                for s in arq["segmentos"] if s.get("cargo")]
+        if segs:
+            arq["segmentos"] = segs
+        else:
+            del arq["segmentos"]
+    return arq
 
 
 # ---------------------------------------------------------------------------
@@ -111,12 +143,14 @@ class LexCorpusFilesPipeline(FilesPipeline):
 # 2. Sidecar — checksum + .meta.json atômico
 # ---------------------------------------------------------------------------
 class SidecarPipeline:
-    def __init__(self, store_root: str):
+    def __init__(self, store_root: str, versao: str = "2.0"):
         self.store_root = Path(store_root)
+        self.versao = versao
 
     @classmethod
     def from_crawler(cls, crawler):
-        return cls(store_root=crawler.settings.get("FILES_STORE"))
+        return cls(store_root=crawler.settings.get("FILES_STORE"),
+                   versao=versao_contrato(crawler.settings))
 
     def process_item(self, item, spider):
         adapter = ItemAdapter(item)
@@ -135,7 +169,7 @@ class SidecarPipeline:
         adapter["tamanho_bytes"] = tamanho
         adapter["caminho_local"] = str(abs_path)
 
-        sidecar = self._build_sidecar(adapter)
+        sidecar = self._build_sidecar(adapter, self.versao)
         destino = abs_path.parent / f"{nome}.meta.json"
         atomic_write_bytes(
             destino, json.dumps(sidecar, ensure_ascii=False, indent=2).encode("utf-8")
@@ -143,7 +177,7 @@ class SidecarPipeline:
         return item
 
     @staticmethod
-    def _build_sidecar(adapter) -> dict:
+    def _build_sidecar(adapter, versao: str = "2.0") -> dict:
         rotulos = {}
         if adapter.get("banca_rotulo"):
             rotulos["banca"] = adapter["banca_rotulo"]
@@ -153,7 +187,7 @@ class SidecarPipeline:
             rotulos["cargos"] = adapter["cargos_rotulo"]
 
         sc = {
-            "schema_version": "2.0",
+            "schema_version": versao,
             "arquivo": adapter["nome"],
             "papel": adapter["papel"],
             "cargos": adapter["cargos"],
@@ -168,6 +202,8 @@ class SidecarPipeline:
         }
         if adapter.get("tipo_prova") is not None:
             sc["tipo_prova"] = adapter["tipo_prova"]
+        if adapter.get("caderno"):
+            sc["caderno"] = adapter["caderno"]
         if adapter.get("multi_cargo"):
             sc["multi_cargo"] = True
         if adapter.get("segmentos"):
@@ -178,7 +214,7 @@ class SidecarPipeline:
             sc["substituido_por"] = adapter["substituido_por"]
         if rotulos:
             sc["rotulos"] = rotulos
-        return sc
+        return ajustar_a_versao(sc, versao)
 
 
 # ---------------------------------------------------------------------------
@@ -197,6 +233,7 @@ class EventoRabbitPipeline:
         self.rabbit_url = settings.get("RABBIT_URL", "amqp://guest:guest@localhost:5672/")
         self.out_dir = settings.get("EVENTOS_OUT_DIR", "eventos_debug")
         self.state_db = settings.get("LEXCORPUS_STATE_DB", "state/lexcorpus_state.db")
+        self.versao = versao_contrato(settings)
         self._por_concurso = {}
         self._store = None        # StateStore, aberto lazy em open_spider
         self._conn = None
@@ -245,10 +282,11 @@ class EventoRabbitPipeline:
             "checksum_sha256": adapter["checksum_sha256"],
             "tamanho_bytes": adapter["tamanho_bytes"],
         }
-        for opc in ("tipo_prova", "multi_cargo", "segmentos", "vigente", "substituido_por"):
+        for opc in ("tipo_prova", "caderno", "multi_cargo", "segmentos",
+                    "vigente", "substituido_por"):
             if adapter.get(opc) is not None:
                 arq[opc] = adapter[opc]
-        entrada["arquivos"].append(arq)
+        entrada["arquivos"].append(ajustar_a_versao(arq, self.versao))
         return item
 
     def close_spider(self, spider):
@@ -397,7 +435,7 @@ class EventoRabbitPipeline:
         if dados["rotulos"].get("cargos"):
             rot["cargos"] = dados["rotulos"]["cargos"]
         evento = {
-            "schema_version": "2.0",
+            "schema_version": self.versao,
             "event": tipo,
             "event_id": str(uuid.uuid4()),
             "produced_at": datetime.now(timezone.utc).isoformat(),

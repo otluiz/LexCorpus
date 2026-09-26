@@ -26,8 +26,9 @@ class ArquivoItem(scrapy.Item):
     papel = scrapy.Field()       # 'prova' | 'gabarito_preliminar' | 'gabarito_definitivo'
     cargos = scrapy.Field()      # lista de slugs: ['geografia'] ou ['*']
     tipo_prova = scrapy.Field()  # '1' | 'amarela' | None
+    caderno = scrapy.Field()     # v2.1: código impresso no PDF, ex. 'BACEN13_002_04' | None
     multi_cargo = scrapy.Field() # bool
-    segmentos = scrapy.Field()   # lista opcional [{cargo, pagina_inicio, pagina_fim, ancora}]
+    segmentos = scrapy.Field()   # lista opcional [{cargo|caderno, pagina_inicio, pagina_fim, ancora}]
     vigente = scrapy.Field()     # bool (ciclo de vida)
     substituido_por = scrapy.Field()  # nome do definitivo, ou None
 

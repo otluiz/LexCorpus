@@ -46,6 +46,13 @@ STORAGE_URI_SCHEME = "file://"
 # (ver LexCorpusFilesPipeline._onsuccess em pipelines.py)
 FILES_EXPIRES = 700
 
+# --- Versão do contrato emitida (docs/CONTRATO.md) ---------------------------
+# "2.0" (default) ou "2.1". A 2.1 acrescenta o campo `caderno`; o schema que o
+# LexLearn valida só aceita 2.1 depois de atualizado. Por isso o default fica
+# em 2.0 (o `caderno` é retirado na saída) até o LexLearn confirmar o schema
+# novo: aí basta LEXCORPUS_CONTRATO_VERSAO=2.1 — nenhuma mudança de código.
+LEXCORPUS_CONTRATO_VERSAO = os.environ.get("LEXCORPUS_CONTRATO_VERSAO", "2.0")
+
 # --- StateStore (memória entre crawls — contrato §6.11) ----------------------
 # SQLite com o que cada concurso já publicou: é o que permite distinguir
 # "novo" (concurso.disponivel), "mudou" (concurso.atualizado — ex.: saiu o
