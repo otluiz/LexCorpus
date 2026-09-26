@@ -19,13 +19,14 @@ from __future__ import annotations
 
 import os
 import json
+import hashlib
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
 from itemadapter import ItemAdapter
 from scrapy.exceptions import DropItem
-from scrapy.pipelines.files import FilesPipeline
+from scrapy.pipelines.files import FileException, FilesPipeline
 
 from .statestore import StateStore
 from .util import sha256_file, atomic_write_bytes
@@ -44,6 +45,13 @@ class LexCorpusFilesPipeline(FilesPipeline):
     o arquivo antigo, trata como "uptodate" e loga WARNING com a instrução.
     Para autorizar o re-download dos expirados num crawl:
         scrapy crawl X -s LEXCORPUS_REBAIXAR_EXPIRADOS=True
+
+    GUARDA DE DUPLICATA ENTRE CONCURSOS: o mesmo PDF (mesmo SHA-256) já
+    registrado no StateStore sob OUTRO concurso é recusado antes de ir ao
+    disco — o LexLearn aproveita PDF solto na pasta, então não basta deixar
+    de escrever o sidecar. Caso real: gab_definitivo_todos_cargos-1.pdf do
+    BACEN13 copiado para a pasta do SERPRO13. O item segue sem 'files' e o
+    SidecarPipeline o descarta: sem sidecar, sem evento.
     """
 
     def file_path(self, request, response=None, info=None, *, item=None):
@@ -52,6 +60,25 @@ class LexCorpusFilesPipeline(FilesPipeline):
         concurso = adapter["concurso"]
         nome = adapter.get("nome") or request.url.rsplit("/", 1)[-1]
         return f"{banca}/{concurso}/{nome}"
+
+    def file_downloaded(self, response, request, info, *, item=None):
+        adapter = ItemAdapter(item)
+        checksum = hashlib.sha256(response.body).hexdigest()
+        db = info.spider.settings.get("LEXCORPUS_STATE_DB",
+                                      "state/lexcorpus_state.db")
+        with StateStore(db) as store:
+            outros = [a for a in store.buscar_por_checksum(checksum)
+                      if (a["banca"], a["concurso"])
+                      != (adapter["banca"], adapter["concurso"])]
+        if outros:
+            onde = ", ".join(f"{a['banca']}/{a['concurso']}/{a['nome']}"
+                             for a in outros)
+            info.spider.logger.error(
+                "DUPLICATA recusada: %s já existe em %s (sha256 %s…)",
+                request.url, onde, checksum[:12])
+            self.inc_stats("duplicado_entre_concursos")
+            raise FileException(f"duplicado entre concursos: {onde}")
+        return super().file_downloaded(response, request, info, item=item)
 
     def _onsuccess(self, result, request, info, path):
         file_info = super()._onsuccess(result, request, info, path)

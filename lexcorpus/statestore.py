@@ -92,6 +92,15 @@ class StateStore:
             rows[row["nome"]] = row
         return rows
 
+    def buscar_por_checksum(self, checksum_sha256: str) -> list[dict]:
+        """Onde este conteúdo já foi visto: [{banca, concurso, nome}, ...]."""
+        cur = self._conn.execute(
+            "SELECT banca, concurso, nome FROM arquivo_visto"
+            " WHERE checksum_sha256 = ? ORDER BY banca, concurso, nome",
+            (checksum_sha256,),
+        )
+        return [dict(r) for r in cur.fetchall()]
+
     # -- escrita ---------------------------------------------------------------
 
     def upsert_arquivos(self, arquivos: list[dict]) -> None:
