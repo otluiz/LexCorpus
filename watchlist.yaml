@@ -25,6 +25,23 @@ alvos:
     cron: "0 6 * * *"          # 1x/dia — ciclo encerrado
     ativo: true
 
+  # Carreira fiscal (26/09) — banca confirmada na página oficial da Cebraspe.
+  # Sefaz-AL 2019 (aplicação 2020/21): 2 cargos, 13 PDFs, gabaritos definitivos.
+  - banca: cebraspe
+    spider: cebraspe
+    params: {slug: sefaz_al_19_auditor}
+    cron: "10 6 * * *"         # 1x/dia — ciclo encerrado
+    ativo: true
+
+  # Sefaz-DF 2019 (SEEC/DF, aplicação 2020): 1 cargo, 5 PDFs. A API publica só
+  # o caderno da TARDE (específicos); o de conhecimentos básicos falta na fonte.
+  # O concurso novo (2026, Cebraspe, 265 vagas) ainda não tem edital.
+  - banca: cebraspe
+    spider: cebraspe
+    params: {slug: seec_auditor_19}
+    cron: "20 6 * * *"         # 1x/dia — ciclo encerrado
+    ativo: true
+
   # --- FGV — spider pronto (18/08) ----------------------------------------
   - banca: fgv
     spider: fgv
@@ -40,19 +57,31 @@ alvos:
     ativo: false               # spider validado; ativar p/ entrar na automação
 
   # --- CESGRANRIO — spider pronto (18/08, API pública do portal) -----------
-  # Entrada abaixo gerada pela descoberta ADR-0006 (buscador + orquestrador):
-  # Transpetro 2026, banca Cesgranrio (catálogo PCI confirma certames
-  # Cesgranrio×Transpetro 2006–2023). O spider é real (sem Playwright):
-  # descobrir o evento_id em GET /api/PortalEventos antes de ativar.
+  # Transpetro 2023 (PSP-RH-2023): portal próprio do cliente, mesma API. O
+  # evento junta 3 editais (nível médio 2023.1, superior 2023.2, mar 2023.3)
+  # -> dividir_editais: um concurso por edital. 51 provas + gabaritos
+  # preliminar e final + padrões de resposta = 59 PDFs (crawl de 26/09).
+  - banca: cesgranrio
+    spider: cesgranrio
+    organ: Transpetro
+    params: {host: transpetro.cesgranrio.org.br, evento_id: "12",
+             concurso: transpetro_2023, dividir_editais: "1"}
+    cron: "30 6 * * 1"         # 1x/semana — ciclo encerrado em 2024
+    ativo: true
+
+  # Transpetro 2026: evento 22 do portal GERAL (confirmado em 26/09). Prova
+  # em nov/dez/2026 — até lá a página só tem editais (o spider não emite
+  # nada). Depois da prova, subir para 4x/dia enquanto o ciclo
+  # preliminar→definitivo estiver aberto.
   - banca: cesgranrio
     spider: cesgranrio
     organ: Transpetro
     concurso: transpetro_2026
     edital_data: "2026-08-01"
     cargos: [Analista de Sistemas, Administrador, Engenheiro de Produção]
-    params: {evento_id: "<id_em_/api/PortalEventos>"}
-    cron: "0 */6 * * *"
-    ativo: false  # falta o evento_id do certame (ver comentário acima)
+    params: {evento_id: "22", concurso: transpetro_2026}
+    cron: "0 7 * * *"          # 1x/dia até a prova
+    ativo: true
 
 # Spiders de descoberta: percorrem SÓ listagens (sem baixar PDF) e propõem
 # novos alvos. Saída em eventos_debug/descoberta/; promoção ao watchlist
