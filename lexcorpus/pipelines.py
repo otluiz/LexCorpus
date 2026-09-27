@@ -198,6 +198,7 @@ class SidecarPipeline:
                 "fonte_url": adapter["fonte_url"],
                 "raspado_em": datetime.now(timezone.utc).isoformat(),
                 "scraper_versao": "lexcorpus/0.1",
+                **(adapter.get("origem_extra") or {}),
             },
         }
         if adapter.get("tipo_prova") is not None:

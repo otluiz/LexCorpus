@@ -1,0 +1,62 @@
+# Manifesto de ingestão manual — BACEN 2013 (CESPE/UnB, hoje Cebraspe).
+# Fora da API da Cebraspe (eventos/bacen_13 não existe); os PDFs já estão na
+# pasta do concurso, só faltava o metadado.
+#
+# Tudo abaixo foi lido dos PDFs (pdftotext), não do nome do arquivo:
+#   - provas: código no cabeçalho, ||BACEN13_002_04N800189|| e ||BACEN13_CB1_01N293889||
+#   - gabarito: 12 páginas, uma por caderno, todas "GABARITOS OFICIAIS DEFINITIVOS"
+#
+# Uso:  python -m lexcorpus.ingestao_manual manifestos/cebraspe/bacen13_analista.yaml [--gravar]
+
+banca: cebraspe
+concurso: bacen13_analista
+
+# A CONFIRMAR: a prova CB1 traz a marca d'água do PCI Concursos; a URL exata
+# de cada arquivo não foi registrada quando eles entraram no acervo.
+fonte_url: https://www.pciconcursos.com.br/
+
+rotulos:
+  banca: CESPE/UnB
+  concurso: "Banco Central do Brasil 2013 — Analista e Técnico"
+  cargos:
+    analista_area_1: "Analista - Área 1: Análise e Desenvolvimento de Sistemas"
+    analista_area_2: "Analista - Área 2: Suporte à Infraestrutura de Tecnologia da Informação"
+    analista_area_3: "Analista - Área 3: Política Econômica e Monetária"
+    analista_area_4: "Analista - Área 4: Contabilidade e Finanças"
+    analista_area_5: "Analista - Área 5: Infraestrutura e Logística"
+    analista_area_6: "Analista - Área 6: Gestão e Análise Processual"
+    tecnico_area_1: "Técnico - Área 1: Suporte Administrativo"
+    tecnico_area_2: "Técnico - Área 2: Segurança Institucional"
+
+arquivos:
+  - nome: bacen13_002_04.pdf
+    papel: prova
+    cargos: [analista_area_2]
+    caderno: BACEN13_002_04
+    observacao: "conhecimentos específicos"
+
+  - nome: bacen13_cb1_01.pdf
+    papel: prova
+    cargos: [analista_area_1, analista_area_2, analista_area_4, analista_area_5]
+    caderno: BACEN13_CB1_01
+    observacao: "conhecimentos básicos para Analista - Áreas 1, 2, 4 e 5"
+
+  - nome: gab_definitivo_todos_cargos-1.pdf
+    papel: gabarito_definitivo
+    cargos: ["*"]
+    multi_cargo: true
+    segmentos:
+      - {caderno: BACEN13_001_01, cargo: analista_area_1, pagina_inicio: 1, pagina_fim: 1}
+      - {caderno: BACEN13_002_04, cargo: analista_area_2, pagina_inicio: 2, pagina_fim: 2}
+      - {caderno: BACEN13_003_07, cargo: analista_area_3, pagina_inicio: 3, pagina_fim: 3}
+      - {caderno: BACEN13_004_10, cargo: analista_area_4, pagina_inicio: 4, pagina_fim: 4}
+      - {caderno: BACEN13_005_13, cargo: analista_area_5, pagina_inicio: 5, pagina_fim: 5}
+      - {caderno: BACEN13_006_16, cargo: analista_area_6, pagina_inicio: 6, pagina_fim: 6}
+      - {caderno: BACEN13_007_20, cargo: tecnico_area_1, pagina_inicio: 7, pagina_fim: 7}
+      - {caderno: BACEN13_008_25, cargo: tecnico_area_2, pagina_inicio: 8, pagina_fim: 8}
+      # conhecimentos básicos: um caderno serve vários cargos -> só o caderno
+      - {caderno: BACEN13_CB1_01, pagina_inicio: 9, pagina_fim: 9}
+      - {caderno: BACEN13_CB2_01, pagina_inicio: 10, pagina_fim: 10}
+      - {caderno: BACEN13_CB3_01, pagina_inicio: 11, pagina_fim: 11}
+      - {caderno: BACEN13_CB4_01, pagina_inicio: 12, pagina_fim: 12}
+    observacao: "o mesmo arquivo (md5 ef1bc4b8…) está por engano também em serpro13_analista_ti/"

@@ -169,6 +169,20 @@ metadados dos sidecars — sem baixar nada da rede:
 consolidados multi-cargo (`cargos: ["*"]`, contrato §5). O storage vem de
 `--store`, de `LEXCORPUS_FILES_STORE` ou do default Docker.
 
+## Ingestão manual (PDF obtido fora do crawler)
+
+Acervo antigo, banca sem spider, arquivo baixado à mão: descreva-o num
+manifesto em `manifestos/{banca}/{concurso}.yaml` (formato no docstring de
+`lexcorpus/ingestao_manual.py`; exemplo real: `manifestos/cebraspe/bacen13_analista.yaml`).
+O PDF entra pelos mesmos pipelines do crawler — sidecar, StateStore, evento.
+
+    python -m lexcorpus.ingestao_manual manifestos/cebraspe/bacen13_analista.yaml           # simula
+    python -m lexcorpus.ingestao_manual manifestos/cebraspe/bacen13_analista.yaml --gravar  # grava
+
+Sem `--gravar` nada é tocado. Com erro nenhum arquivo é gravado: recusa o
+conteúdo que já existe em outro concurso, a sobrescrita de um PDF diferente
+e o sidecar fora do schema.
+
 ## Descoberta por palavra-chave (ADR-0006)
 
 Quando um concurso concorrido entra "no ar" (ex.: Transpetro 2026), use o

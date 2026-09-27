@@ -34,6 +34,7 @@ class ArquivoItem(scrapy.Item):
 
     # --- origem / rastreabilidade ---
     fonte_url = scrapy.Field()   # URL de onde o PDF foi raspado
+    origem_extra = scrapy.Field()  # dict somado a sidecar.origem (ex.: metodo da ingestão manual)
     nome = scrapy.Field()        # basename final no storage (sem barra)
 
     # --- preenchidos pelos pipelines ---
