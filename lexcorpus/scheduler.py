@@ -74,6 +74,8 @@ def carregar_watchlist(path: Path) -> list[dict]:
             alvos.append({
                 "secao": secao, "grupo": grupo, "chave": chave,
                 "spider": spider, "params": params,
+                # settings do Scrapy (-s); fora da chave de propósito
+                "settings": dict(entrada.get("settings") or {}),
                 "cron": entrada.get("cron"),
                 "rotulo": _rotulo(entrada),
             })
@@ -146,6 +148,8 @@ def montar_comando(alvo: dict) -> list[str]:
     cmd = ["scrapy", "crawl", alvo["spider"]]
     for chave, valor in sorted(alvo["params"].items()):
         cmd += ["-a", f"{chave}={valor}"]
+    for chave, valor in sorted((alvo.get("settings") or {}).items()):
+        cmd += ["-s", f"{chave}={valor}"]
     return cmd
 
 

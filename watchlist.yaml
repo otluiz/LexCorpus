@@ -8,6 +8,7 @@
 #   banca   — slug canônico (minúsculas, sem acento) — chave do storage
 #   spider  — nome do spider Scrapy (scrapy crawl <spider>)
 #   params  — repassados como -a chave=valor ao spider
+#   settings — (opcional) repassados como -s CHAVE=valor ao Scrapy
 #   cron    — quando coletar (horário local do container; defina TZ)
 #   ativo   — false = pausado OU spider ainda não implementado
 #
@@ -42,6 +43,21 @@ alvos:
     cron: "20 6 * * *"         # 1x/dia — ciclo encerrado
     ativo: true
 
+  # Sefaz-CE 2021 (4 cargos de auditor fiscal, 17 PDFs; fixture dos testes).
+  - banca: cebraspe
+    spider: cebraspe
+    params: {slug: sefaz_ce_21}
+    cron: "25 6 * * *"         # 1x/dia — ciclo encerrado
+    ativo: true
+
+  # Sefaz-AL 2026 (26/09): edital aberto, inscrições até 21/10, R$ 25,3 mil.
+  # Slug confirmado na API (1 cargo, AFTE, 0 arquivos por ora).
+  - banca: cebraspe
+    spider: cebraspe
+    params: {slug: sefaz_al_26}
+    cron: "40 6 * * *"         # 1x/dia até a prova; depois 4x/dia no ciclo
+    ativo: true
+
   # --- FGV — spider pronto (18/08) ----------------------------------------
   - banca: fgv
     spider: fgv
@@ -53,8 +69,19 @@ alvos:
   - banca: fcc
     spider: fcc
     params: {slug: dpeba125}
+    settings: {ROBOTSTXT_OBEY: false}   # robots.txt da FCC bloqueia /concursos/ (BACKLOG)
     cron: "0 6,18 * * *"       # 2x/dia
     ativo: false               # spider validado; ativar p/ entrar na automação
+
+  # Sefaz-CE 2026 (26/09): auditor-fiscal, FCC. Prova em 01/08, resultado
+  # preliminar em 09/09; o gabarito sai como edital ao fim do certame (os
+  # cadernos ficam no portal do candidato — não raspáveis). Até lá, nada.
+  - banca: fcc
+    spider: fcc
+    params: {slug: sface125}
+    settings: {ROBOTSTXT_OBEY: false}   # robots.txt da FCC bloqueia /concursos/ (BACKLOG)
+    cron: "15 6,18 * * *"      # 2x/dia — ciclo aberto
+    ativo: true
 
   # --- CESGRANRIO — spider pronto (18/08, API pública do portal) -----------
   # Transpetro 2023 (PSP-RH-2023): portal próprio do cliente, mesma API. O
@@ -81,6 +108,14 @@ alvos:
     cargos: [Analista de Sistemas, Administrador, Engenheiro de Produção]
     params: {evento_id: "22", concurso: transpetro_2026}
     cron: "0 7 * * *"          # 1x/dia até a prova
+    ativo: true
+
+  # PC-AP 2026 (26/09): Delegado R$ 31,4 mil + Oficial Investigador; evento 26
+  # do portal geral. Inscrições até 19/10, prova em 06/12.
+  - banca: cesgranrio
+    spider: cesgranrio
+    params: {evento_id: "26", concurso: pc_ap_2026}
+    cron: "10 7 * * *"         # 1x/dia até a prova; depois 4x/dia no ciclo
     ativo: true
 
 # Spiders de descoberta: percorrem SÓ listagens (sem baixar PDF) e propõem

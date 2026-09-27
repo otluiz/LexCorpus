@@ -204,3 +204,22 @@ def test_grupos_disparam_em_threads_separadas(alvos, tmp_path):
     # 3 crawls: cebraspe na sua thread; fgv alvo + fgv descoberta seriados
     # na thread da fgv (mesmo grupo)
     assert run.call_count == 3
+
+
+def test_montar_comando_com_settings(tmp_path):
+    """`settings:` do watchlist vira -s CHAVE=valor (ex.: FCC, cujo robots.txt
+    bloqueia /concursos/ inteiro — decisão registrada no BACKLOG). Não entra
+    na chave do estado: mudar um setting não reinicia o agendamento."""
+    p = tmp_path / "w.yaml"
+    p.write_text(
+        "alvos:\n"
+        "  - banca: fcc\n"
+        "    spider: fcc\n"
+        "    params: {slug: sface125}\n"
+        "    settings: {ROBOTSTXT_OBEY: false}\n"
+        "    cron: '0 6 * * *'\n"
+        "    ativo: true\n")
+    (alvo,) = sch.carregar_watchlist(p)
+    assert sch.montar_comando(alvo) == [
+        "scrapy", "crawl", "fcc", "-a", "slug=sface125", "-s", "ROBOTSTXT_OBEY=False"]
+    assert "ROBOTSTXT" not in alvo["chave"]
