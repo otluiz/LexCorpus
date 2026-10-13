@@ -405,8 +405,16 @@
          todas as bancas
    - [X] Estado: o discursivo coletado antes não é relistado nem contado
    - [X] CONTRATO.md §6 regra 12 (sem mudança de schema)
-   - [ ] Os PDFs discursivos já entregues no gpu01 continuam na pasta do
-         LexLearn: remover é decisão do Administrador
+   - [X] gpu01 (13/10): os 20 PDFs discursivos já entregues, com os
+         sidecars, foram MOVIDOS para raw/descartados/discursivo/{banca}/
+         {concurso}/ (LEIAME.txt com a origem). Os 2 da PRF já estavam
+         ingeridos: documents 51 e 52 tiveram o source_path corrigido no
+         mesmo passo
+   - [X] Deploy do 27cae7b no gpu01 (13/10): filtro de objetivas ativo no
+         scheduler
+   - [ ] Destino final dos descartados e das linhas 51/52 (ainda
+         document_type=exam, logical_type=prova; os .txt seguem em
+         processed/exams/cebraspe/prf_21/) — decisão do Administrador
 
 * Docker / profissionalização
 ** FEITO [#A] Dockerfile multi-stage (base + base-playwright)
