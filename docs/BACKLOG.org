@@ -99,12 +99,13 @@
          manual incluso; FCC desativada
    - [ ] Atualizar o gpu01: repetir o `git archive` + build + up (não há
          git lá; o deploy não leva credencial do GitHub)
-   - [ ] ALINHAR com o LexLearn: no broker do gpu01 NÃO existe a fila
-         lexlearn.lexcorpus.ingest (13/10: só document.indexar e
-         document.received). Os concurso.disponivel do 1º ciclo (9 eventos)
-         foram DESCARTADOS pelo exchange; os PDFs e sidecars estão no disco.
-         Decisão do Administrador do LexLearn: subir o lexcorpus_consumer
-         lá, ou ao menos declarar a fila durável para os avisos esperarem
+   - [X] Fila do v2.1 no gpu01: o lexcorpus_consumer do LexLearn foi
+         LIGADO em 13/10 (decisão do Administrador), como serviço
+         (docker-compose.lexcorpus-consumer.yml, branch
+         ops/lexcorpus-consumer do LexLearn). Fila lexlearn.lexcorpus.ingest
+         + DLQ, ligada a concurso.#, 1 consumidor. Os 9 avisos do 1º ciclo
+         (antes da fila) se perderam; voltam quando cada concurso tiver
+         novidade
    - [ ] Na revisão: PSS (temporários) e juiz cujo rótulo não diz "juiz"
          (ex.: tjmsjuiz25)
    - [ ] Inventário sem ano (slugs como "tjba", "trf1"): ler o ano na
