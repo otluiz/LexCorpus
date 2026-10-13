@@ -88,9 +88,23 @@
    - [X] Serviço `scheduler` no compose (loop de 10 min, crawls no mesmo
          container); RABBIT_URL do .env (LEXCORPUS_RABBIT_URL): o broker do
          gpu01 não aceita guest:guest
-   - [ ] Subir no gpu01 (não há nada do LexCorpus lá em 13/10). O estado do
-         notebook NÃO descreve o gpu01 (o acervo fiscal e a Transpetro só
-         existem no notebook): estado novo lá, e a leva refeita por CLI
+   - [X] NO AR no gpu01 em 13/10 (dono do produto: o notebook não fica
+         ligado). ~/LexCorpus por `git archive` da branch
+         feature/consumidor-lexpubli (commit em ~/LexCorpus/.deploy-commit);
+         .env lá (chmod 600) com LEXCORPUS_STORAGE_DIR=~/LexLearn-v3/data e
+         LEXCORPUS_RABBIT_URL do .env do LexLearn; serviço `scheduler` com
+         restart unless-stopped. Estado NOVO lá (o do notebook não descreve
+         o gpu01); a leva foi refeita por CLI: listagem FGV de 13/10 (344),
+         mesmas 10 confirmações, 2/semana de 13/10 a 09/11. Watchlist
+         manual incluso; FCC desativada
+   - [ ] Atualizar o gpu01: repetir o `git archive` + build + up (não há
+         git lá; o deploy não leva credencial do GitHub)
+   - [ ] ALINHAR com o LexLearn: no broker do gpu01 NÃO existe a fila
+         lexlearn.lexcorpus.ingest (13/10: só document.indexar e
+         document.received). Os concurso.disponivel do 1º ciclo (9 eventos)
+         foram DESCARTADOS pelo exchange; os PDFs e sidecars estão no disco.
+         Decisão do Administrador do LexLearn: subir o lexcorpus_consumer
+         lá, ou ao menos declarar a fila durável para os avisos esperarem
    - [ ] Na revisão: PSS (temporários) e juiz cujo rótulo não diz "juiz"
          (ex.: tjmsjuiz25)
    - [ ] Inventário sem ano (slugs como "tjba", "trf1"): ler o ano na
