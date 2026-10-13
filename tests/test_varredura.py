@@ -210,3 +210,12 @@ def test_scheduler_nao_dispara_antes_da_liberacao():
              {"chave": "b", "cron": "45 5 * * 2", "a_partir_de": "2026-10-13", "rotulo": "b"}]
     agora = datetime(2026, 10, 13, 6, 0).astimezone()
     assert [a["chave"] for a in sch.alvos_vencidos(alvos, {}, agora)] == ["b"]
+
+
+def test_reescalonar_refaz_so_os_ainda_nao_liberados(rev):
+    rev(novos_por_semana=1).confirmar(fiscais(4), "fiscal")      # 13, 19, 26/10 e 02/11
+    r = rev(novos_por_semana=2, hoje=date(2026, 10, 20))
+    r.reescalonar()
+    assert datas(r) == {"fgv:sefaz3": "2026-10-13", "fgv:sefaz2": "2026-10-19",   # já liberados
+                        "fgv:sefaz1": "2026-10-20",     # a semana de 19/10 ainda tinha vaga
+                        "fgv:sefaz0": "2026-10-26"}

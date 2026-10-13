@@ -83,9 +83,14 @@
    - [X] Liberação escalonada (novos_por_semana: 1): a_partir_de de
          13/10 a 14/12; o scheduler não dispara antes. Corrige o disparo
          do lote inteiro na primeira passada
-   - [ ] Scheduler rodando de fato (nenhum ativo no notebook em 13/10); na
-         subida ao gpu01, levar o estado da varredura (varredura.yaml,
-         watchlist.varredura.yaml, inventario/) e o catálogo de estado
+   - [X] novos_por_semana: 2 (13/10); `agenda --reescalonar` refaz a escala
+         dos ainda não liberados
+   - [X] Serviço `scheduler` no compose (loop de 10 min, crawls no mesmo
+         container); RABBIT_URL do .env (LEXCORPUS_RABBIT_URL): o broker do
+         gpu01 não aceita guest:guest
+   - [ ] Subir no gpu01 (não há nada do LexCorpus lá em 13/10). O estado do
+         notebook NÃO descreve o gpu01 (o acervo fiscal e a Transpetro só
+         existem no notebook): estado novo lá, e a leva refeita por CLI
    - [ ] Na revisão: PSS (temporários) e juiz cujo rótulo não diz "juiz"
          (ex.: tjmsjuiz25)
    - [ ] Inventário sem ano (slugs como "tjba", "trf1"): ler o ano na

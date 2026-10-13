@@ -77,9 +77,10 @@ services:
     environment:
       # storage canônico do contrato: mesmo path que o worker do LexLearn vê
       LEXCORPUS_FILES_STORE: /data/raw/exams
-      # produção: publica de verdade no broker do projeto (não em eventos_debug)
+      # produção: publica de verdade no broker do projeto (não em eventos_debug).
+      # A senha do broker do LexLearn vem do .env (LEXCORPUS_RABBIT_URL), nunca daqui.
       RABBIT_ENABLED: "true"
-      RABBIT_URL: amqp://guest:guest@rabbitmq:5672/
+      RABBIT_URL: ${LEXCORPUS_RABBIT_URL:-amqp://guest:guest@rabbitmq:5672/}
     volumes:
       # O DIRETÓRIO COMPARTILHADO — o ponto de contato do ADR-0006. Dentro do
       # container ele é sempre /data, porque o `pasta_uri` publicado no evento
@@ -102,6 +103,35 @@ services:
       - lexcorpus-state:/state   # StateStore SQLite + scheduler_state (§6.11)
     # sem restart: um crawl termina, o container morre. Falhou? rode de novo.
     restart: "no"
+
+  # Scheduler (longa duração): a cada 10 min dispara `scrapy crawl` para os
+  # alvos vencidos do watchlist manual (soberano), do automático (ADR-0007) e
+  # da varredura (ADR-0009, liberação escalonada). Os crawls rodam DENTRO
+  # deste container, com o mesmo /data e o mesmo /state.
+  #
+  #   docker compose -f docker-compose.crawler.yml -f docker-compose.lexlearn.yml \
+  #     --profile scheduler up -d scheduler
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    profiles: ["scheduler"]
+    entrypoint: ["python", "-m", "lexcorpus.scheduler"]
+    command: ["--loop", "600"]
+    environment:
+      LEXCORPUS_FILES_STORE: /data/raw/exams
+      RABBIT_ENABLED: "true"
+      RABBIT_URL: ${LEXCORPUS_RABBIT_URL:-amqp://guest:guest@rabbitmq:5672/}
+      LEXCORPUS_CATALOGO: /state/catalogo.yaml
+    volumes:
+      - type: bind
+        source: ${LEXCORPUS_STORAGE_DIR:?defina LEXCORPUS_STORAGE_DIR com o diretório de storage compartilhado}
+        target: /data
+      - lexcorpus-state:/state
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: {cpus: "2", memory: 1G}   # não competir com o Ollama do gpu01
 
   # Consumidor dos concursos aprovados no LexPubli (ADR-0007). Processo de
   # LONGA duração, ao contrário dos crawls: escuta lexpubli.events, aplica a

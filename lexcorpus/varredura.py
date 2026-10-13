@@ -262,6 +262,15 @@ class Revisao:
             c["a_partir_de"] = max(semana, self.hoje).isoformat()
             ocupadas[semana] = ocupadas.get(semana, 0) + 1
 
+    def reescalonar(self) -> None:
+        """Refaz a escala dos que ainda não foram liberados (a_partir_de
+        depois de hoje), ex.: quando novos_por_semana muda. O que já foi
+        liberado fica como está."""
+        for c in self.confirmados.values():
+            if c.get("a_partir_de") and c["a_partir_de"] > self.hoje.isoformat():
+                del c["a_partir_de"]
+        self.escalonar()
+
     def descartar(self, chaves: list[str], motivo: str) -> None:
         agora = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         for chave in chaves:
@@ -304,7 +313,9 @@ def main(argv=None) -> int:
     pr.add_argument("--confirmar", help="chaves separadas por vírgula (ex.: fgv:sefazes22)")
     pr.add_argument("--descartar", help="chaves separadas por vírgula")
     pr.add_argument("--motivo", default="")
-    sub.add_parser("agenda", help="mostra (e completa) a liberação semanal dos confirmados")
+    pa = sub.add_parser("agenda", help="mostra (e completa) a liberação semanal dos confirmados")
+    pa.add_argument("--reescalonar", action="store_true",
+                    help="refaz a escala dos ainda não liberados (ex.: novos_por_semana mudou)")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     # tudo ao lado do watchlist da varredura (no Docker, /state), o mesmo que o scheduler lê
@@ -329,6 +340,8 @@ def main(argv=None) -> int:
                   catalogo=Catalogo.com_semente(os.environ.get("LEXCORPUS_CATALOGO", CATALOGO_PATH)),
                   decisoes=decisoes, watchlist=watchlist)
     if args.comando == "agenda":
+        if args.reescalonar:
+            rev.reescalonar()
         rev._salvar()                       # escalona quem ainda não tem data
         for chave, c in sorted(rev.confirmados.items(), key=lambda kv: (kv[1]["a_partir_de"], kv[0])):
             print(f"  {c['a_partir_de']}  {c['carreira']:<10} {chave}")
