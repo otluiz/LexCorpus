@@ -1,0 +1,18 @@
+{
+  "event_id": "01a1330a-1c2b-7d3e-8f40-5a6b7c8d9e0f",
+  "event_type": "document.acquisition.completed",
+  "event_version": "1.0",
+  "occurred_at": "2026-10-13T09:15:02.481Z",
+  "producer": "lexcorpus/consumidor",
+  "correlation_id": "01a132f0-d60d-71bc-bfbc-021403fdbc57",
+  "data": {
+    "contest_id": "01a132f0-8537-7fdb-bd15-c39aa6c10f7e",
+    "relation": "previous",
+    "exam_board": { "slug": "cebraspe", "name": "Cebraspe" },
+    "lexcorpus_contest": "sefaz_al_19_auditor",
+    "year": 2019,
+    "positions": ["auditor_fiscal_da_receita_estadual"],
+    "files": { "prova": 6, "gabarito_preliminar": 0, "gabarito_definitivo": 7 },
+    "source_url": "https://apis.cebraspe.org.br/cebraspe/eventos/sefaz_al_19_auditor"
+  }
+}

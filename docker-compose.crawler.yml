@@ -103,5 +103,32 @@ services:
     # sem restart: um crawl termina, o container morre. Falhou? rode de novo.
     restart: "no"
 
+  # Consumidor dos concursos aprovados no LexPubli (ADR-0007). Processo de
+  # LONGA duração, ao contrário dos crawls: escuta lexpubli.events, aplica a
+  # politica_coleta.yaml e responde document.acquisition.* em lexcorpus.events.
+  #
+  #   docker compose -f docker-compose.crawler.yml -f docker-compose.lexlearn.yml \
+  #     --profile consumidor up -d consumidor
+  #
+  # NÃO monta /data: o consumidor não lê nem escreve PDF (quem coleta é o
+  # crawl disparado pelo scheduler). Só o volume de estado: StateStore,
+  # watchlist automático e o catálogo que ele alimenta.
+  consumidor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    profiles: ["consumidor"]
+    entrypoint: ["python", "-m", "lexcorpus.consumidor"]
+    command: []
+    environment:
+      RABBIT_ENABLED: "true"
+      RABBIT_URL: amqp://guest:guest@rabbitmq:5672/
+      # o catálogo alimentado pelo consumidor vive no estado (o catalogo.yaml
+      # do repositório é a semente versionada; ver README)
+      LEXCORPUS_CATALOGO: /state/catalogo.yaml
+    volumes:
+      - lexcorpus-state:/state
+    restart: unless-stopped
+
 volumes:
   lexcorpus-state:               # sobrevive aos crawls efêmeros (run --rm)

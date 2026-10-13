@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lex/lexpubli/events/v1/document.acquisition.completed.schema.json",
+  "title": "document.acquisition.completed - v1.0",
+  "description": "O LexCorpus coletou um concurso (o anunciado ou um anterior) e já o entregou ao LexLearn pelo contrato v2.1. Emitido em lexcorpus.events. Não carrega caminho de storage: o LexPubli só precisa saber QUE há provas (ADR-0002 §3). Um evento por concurso coletado; uma nova coleta do mesmo concurso (ex.: o gabarito definitivo saiu) gera outro evento com as contagens atualizadas.",
+  "allOf": [
+    { "$ref": "https://lex/lexpubli/events/v1/envelope.schema.json" },
+    {
+      "required": ["correlation_id"],
+      "properties": {
+        "event_type": { "const": "document.acquisition.completed" },
+        "event_version": { "pattern": "^1\\.[0-9]+$" },
+        "producer": { "pattern": "^lexcorpus(/[a-z0-9_.-]+)?$" },
+        "correlation_id": { "$ref": "https://lex/lexpubli/events/v1/common.schema.json#/$defs/uuid", "description": "event_id do contest.discovery.created que originou a coleta. Obrigatório." },
+        "data": { "$ref": "#/$defs/data" }
+      }
+    }
+  ],
+  "$defs": {
+    "data": {
+      "allOf": [{ "$ref": "https://lex/lexpubli/events/v1/common.schema.json#/$defs/acquisition_data_base" }],
+      "type": "object",
+      "required": ["contest_id", "relation", "exam_board", "lexcorpus_contest", "year", "files"],
+      "additionalProperties": false,
+      "properties": {
+        "contest_id": true,
+        "relation": true,
+        "exam_board": { "$ref": "https://lex/lexpubli/events/v1/common.schema.json#/$defs/exam_board" },
+        "lexcorpus_contest": {
+          "$ref": "https://lex/lexpubli/events/v1/common.schema.json#/$defs/slug",
+          "description": "Slug do concurso no LexCorpus (nome da pasta; o 'concurso' do contrato v2.1). Ex.: sefaz_al_19_auditor."
+        },
+        "year": { "type": ["integer", "null"], "minimum": 1990, "maximum": 2100, "description": "Ano do certame coletado; null se o LexCorpus não souber." },
+        "positions": {
+          "type": "array",
+          "items": { "$ref": "https://lex/lexpubli/events/v1/common.schema.json#/$defs/slug" },
+          "description": "Slugs dos cargos cobertos pelos arquivos (opcional)."
+        },
+        "files": {
+          "type": "object",
+          "required": ["prova", "gabarito_preliminar", "gabarito_definitivo"],
+          "additionalProperties": false,
+          "description": "Contagem de arquivos VIGENTES por papel (mesmo vocabulário do contrato v2.1).",
+          "properties": {
+            "prova": { "type": "integer", "minimum": 0 },
+            "gabarito_preliminar": { "type": "integer", "minimum": 0 },
+            "gabarito_definitivo": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "source_url": { "type": "string", "format": "uri", "description": "Fonte oficial de onde os arquivos vieram (opcional)." }
+      }
+    }
+  }
+}

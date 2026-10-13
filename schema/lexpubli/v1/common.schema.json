@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lex/lexpubli/events/v1/common.schema.json",
+  "title": "Definições comuns dos eventos v1 do ecossistema Lex",
+  "description": "Não é um evento: só $defs reutilizados pelos schemas de evento.",
+  "$defs": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(_[a-z0-9]+)*$",
+      "description": "Slug canônico: mesmo algoritmo de lexcorpus.util.slugify e concursos.util.slug_lex."
+    },
+    "uuid": { "type": "string", "format": "uuid" },
+    "exam_board": {
+      "type": "object",
+      "required": ["slug"],
+      "additionalProperties": false,
+      "properties": {
+        "slug": { "$ref": "#/$defs/slug" },
+        "name": { "type": "string", "minLength": 1, "description": "Rótulo humano (opcional nas respostas do LexCorpus)." }
+      }
+    },
+    "relation": {
+      "type": "string",
+      "enum": ["current", "previous"],
+      "description": "current = o próprio concurso anunciado; previous = um certame anterior do mesmo órgão/cargo (provas para estudo)."
+    },
+    "acquisition_data_base": {
+      "type": "object",
+      "required": ["contest_id", "relation"],
+      "properties": {
+        "contest_id": { "$ref": "#/$defs/uuid", "description": "contest_id do LexPubli (vem no contest.discovery.created)." },
+        "relation": { "$ref": "#/$defs/relation" }
+      }
+    }
+  }
+}

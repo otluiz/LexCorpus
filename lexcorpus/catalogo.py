@@ -178,7 +178,7 @@ class Catalogo:
                   edital_data=None, banca=None, banca_rotulo=None,
                   concurso=None, concurso_rotulo=None, cargos=None,
                   spider=None, params=None, cron=None, status="aguardando_banca",
-                  observacao="", substituir=True) -> dict:
+                  observacao="", substituir=True, lexpubli=None) -> dict:
         """Adiciona um concurso a `vigentes`. Parametrizável: omita banca
         (None) para registrar o alvo ANTES da descoberta — o buscador
         preenche depois (update-busca)."""
@@ -206,6 +206,9 @@ class Catalogo:
             entry["params"] = params
         if cron is not None:
             entry["cron"] = cron
+        if lexpubli:
+            # origem no LexPubli (ADR-0007): contest_id, event_id, page_url
+            entry["lexpubli"] = lexpubli
 
         vigentes = self.dados["vigentes"]
         idx = next((i for i, v in enumerate(vigentes)

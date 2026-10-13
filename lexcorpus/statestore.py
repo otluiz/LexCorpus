@@ -5,12 +5,21 @@
 #           que o EventoRabbitPipeline saiba distinguir "novo" (disponivel),
 #           "mudou" (atualizado) e "nada mudou" (não publicar — idempotência
 #           do lado produtor).
-"""StateStore do LexCorpus — SQLite, uma tabela.
+"""StateStore do LexCorpus — SQLite.
 
     arquivo_visto(banca, concurso, nome, papel, cargos, tipo_prova,
                   checksum_sha256, tamanho_bytes, vigente, substituido_por,
                   first_seen, last_seen)
     PK: (banca, concurso, nome)   -- cargos como JSON da lista de slugs
+
+    Integração com o LexPubli (ADR-0007):
+    evento_recebido(event_id, event_type, resultado, recebido_em)
+        idempotência do consumidor: event_id já visto = ignorar
+    aquisicao_lexpubli(banca, concurso, contest_id, correlation_id, relation,
+                       ano, registrada_em)
+        "este concurso do LexCorpus atende àquele concurso do LexPubli":
+        o EventoRabbitPipeline consulta para emitir
+        document.acquisition.completed ao publicar o concurso
 
 Concorrência: o scheduler dispara crawls de bancas distintas em paralelo
 (subprocessos). WAL + busy_timeout cobrem escritores concorrentes no mesmo
@@ -42,7 +51,27 @@ CREATE TABLE IF NOT EXISTS arquivo_visto (
     last_seen       TEXT NOT NULL,
     PRIMARY KEY (banca, concurso, nome)
 );
+
+CREATE TABLE IF NOT EXISTS evento_recebido (
+    event_id    TEXT PRIMARY KEY,
+    event_type  TEXT NOT NULL,
+    resultado   TEXT NOT NULL,               -- resumo do que o consumidor fez
+    recebido_em TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS aquisicao_lexpubli (
+    banca          TEXT NOT NULL,
+    concurso       TEXT NOT NULL,            -- slug da pasta no LexCorpus
+    contest_id     TEXT NOT NULL,            -- id do concurso no LexPubli
+    correlation_id TEXT NOT NULL,            -- event_id do contest.discovery.created
+    relation       TEXT NOT NULL,            -- current | previous
+    ano            INTEGER,                  -- ano do certame, se conhecido
+    registrada_em  TEXT NOT NULL,
+    PRIMARY KEY (banca, concurso, contest_id)
+);
 """
+
+PAPEIS = ("prova", "gabarito_preliminar", "gabarito_definitivo")
 
 _COLS = ("banca", "concurso", "nome", "papel", "cargos", "tipo_prova",
          "checksum_sha256", "tamanho_bytes", "vigente", "substituido_por",
@@ -63,7 +92,7 @@ class StateStore:
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA busy_timeout=5000")
-        self._conn.execute(_SCHEMA)
+        self._conn.executescript(_SCHEMA)
         self._conn.commit()
 
     def close(self) -> None:
@@ -149,3 +178,53 @@ class StateStore:
             (substituido_por, _agora(), banca, concurso, nome),
         )
         self._conn.commit()
+
+    # -- integração LexPubli (ADR-0007) --------------------------------------
+
+    def evento_ja_recebido(self, event_id: str) -> bool:
+        cur = self._conn.execute(
+            "SELECT 1 FROM evento_recebido WHERE event_id = ?", (event_id,))
+        return cur.fetchone() is not None
+
+    def registrar_evento_recebido(self, event_id: str, event_type: str,
+                                  resultado: str) -> None:
+        self._conn.execute(
+            "INSERT OR IGNORE INTO evento_recebido"
+            " (event_id, event_type, resultado, recebido_em) VALUES (?, ?, ?, ?)",
+            (event_id, event_type, resultado, _agora()),
+        )
+        self._conn.commit()
+
+    def registrar_aquisicao(self, banca: str, concurso: str, contest_id: str,
+                            correlation_id: str, relation: str,
+                            ano: int | None = None) -> None:
+        """Liga um concurso do LexCorpus a um concurso do LexPubli. Idempotente:
+        repetir só mantém a ligação (a primeira correlação vale)."""
+        self._conn.execute(
+            "INSERT OR IGNORE INTO aquisicao_lexpubli"
+            " (banca, concurso, contest_id, correlation_id, relation, ano, registrada_em)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (banca, concurso, contest_id, correlation_id, relation, ano, _agora()),
+        )
+        self._conn.commit()
+
+    def aquisicoes_de(self, banca: str, concurso: str) -> list[dict]:
+        """Os concursos do LexPubli atendidos por este concurso do LexCorpus."""
+        cur = self._conn.execute(
+            "SELECT banca, concurso, contest_id, correlation_id, relation, ano"
+            " FROM aquisicao_lexpubli WHERE banca = ? AND concurso = ?"
+            " ORDER BY registrada_em",
+            (banca, concurso),
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+    def contagem_vigentes(self, banca: str, concurso: str) -> dict[str, int] | None:
+        """Arquivos VIGENTES por papel, ou None se o concurso nunca foi visto."""
+        rows = self.carregar_concurso(banca, concurso)
+        if not rows:
+            return None
+        contagem = dict.fromkeys(PAPEIS, 0)
+        for row in rows.values():
+            if row["vigente"] and row["papel"] in contagem:
+                contagem[row["papel"]] += 1
+        return contagem

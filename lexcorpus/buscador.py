@@ -531,7 +531,9 @@ def buscar_concursos_anteriores(
     candidatas.sort(key=lambda c: (-c["pontos"], -c["ano"]))
     candidatas = candidatas[:topo_k]
     for c in candidatas:
-        del c["pontos"]
+        # o score fica na saída: a política de coleta automática (ADR-0007)
+        # filtra por ele (politica_coleta.yaml, anteriores.score_minimo)
+        c["score"] = c.pop("pontos")
 
     return {
         "organ": organ,

@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lex/lexpubli/events/v1/document.acquisition.failed.schema.json",
+  "title": "document.acquisition.failed - v1.0",
+  "description": "Uma coleta AUTOMÁTICA falhou. Diferente de awaiting_operator: a política aprovou, mas a execução não deu certo. Emitido em lexcorpus.events.",
+  "allOf": [
+    { "$ref": "https://lex/lexpubli/events/v1/envelope.schema.json" },
+    {
+      "required": ["correlation_id"],
+      "properties": {
+        "event_type": { "const": "document.acquisition.failed" },
+        "event_version": { "pattern": "^1\\.[0-9]+$" },
+        "producer": { "pattern": "^lexcorpus(/[a-z0-9_.-]+)?$" },
+        "correlation_id": { "$ref": "https://lex/lexpubli/events/v1/common.schema.json#/$defs/uuid" },
+        "data": { "$ref": "#/$defs/data" }
+      }
+    }
+  ],
+  "$defs": {
+    "data": {
+      "allOf": [{ "$ref": "https://lex/lexpubli/events/v1/common.schema.json#/$defs/acquisition_data_base" }],
+      "type": "object",
+      "required": ["contest_id", "relation", "reason", "retryable"],
+      "additionalProperties": false,
+      "properties": {
+        "contest_id": true,
+        "relation": true,
+        "reason": {
+          "type": "string",
+          "enum": ["fetch_error", "blocked", "invalid_source", "no_documents"],
+          "description": "fetch_error: erro de rede/HTTP; blocked: robots.txt, captcha ou WAF (não contornamos); invalid_source: a fonte não é oficial ou não confere; no_documents: o alvo existe, mas não há provas publicadas."
+        },
+        "retryable": { "type": "boolean", "description": "true = o LexCorpus vai tentar de novo sozinho." },
+        "exam_board": {
+          "oneOf": [
+            { "$ref": "https://lex/lexpubli/events/v1/common.schema.json#/$defs/exam_board" },
+            { "type": "null" }
+          ]
+        },
+        "lexcorpus_contest": {
+          "oneOf": [
+            { "$ref": "https://lex/lexpubli/events/v1/common.schema.json#/$defs/slug" },
+            { "type": "null" }
+          ]
+        },
+        "detail": { "type": "string", "maxLength": 2000 }
+      }
+    }
+  }
+}

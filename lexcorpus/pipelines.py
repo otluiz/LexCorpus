@@ -477,3 +477,39 @@ class EventoRabbitPipeline:
             (out / f"{evento['concurso']}.json").write_bytes(payload)
             spider.logger.info("evento (dev) gravado: %s (%s)",
                                evento["concurso"], evento["event"])
+        self._responder_lexpubli(evento, spider)
+
+    def _responder_lexpubli(self, evento, spider):
+        """ADR-0007: se este concurso atende a concursos anunciados pelo
+        LexPubli (aquisicao_lexpubli), responde document.acquisition.completed
+        com as contagens VIGENTES por papel.
+
+        Nunca derruba o contrato principal: o evento concurso.* para o
+        LexLearn já saiu; uma falha aqui só é registrada no log.
+        """
+        if self._store is None:
+            return
+        banca, concurso = evento["banca"], evento["concurso"]
+        aquisicoes = self._store.aquisicoes_de(banca, concurso)
+        if not aquisicoes:
+            return
+        from .respostas import Respondedor
+
+        contagem = self._store.contagem_vigentes(banca, concurso) or {}
+        cargos = [c for a in evento["arquivos"] if a.get("vigente", True)
+                  for c in a.get("cargos", [])]
+        rotulo = ((evento.get("extra") or {}).get("rotulos") or {}).get("banca")
+        respondedor = Respondedor(
+            channel=self._channel if self.rabbit_enabled else None,
+            exchange=self.exchange, out_dir=self.out_dir)
+        for aq in aquisicoes:
+            try:
+                respondedor.completed(
+                    contest_id=aq["contest_id"], correlation_id=aq["correlation_id"],
+                    relation=aq["relation"], banca=banca, concurso=concurso,
+                    contagem=contagem, ano=aq["ano"], banca_rotulo=rotulo,
+                    cargos=cargos, fonte_url=evento.get("fonte_url"))
+            except Exception:
+                spider.logger.exception(
+                    "resposta ao LexPubli falhou (%s/%s, contest %s)",
+                    banca, concurso, aq["contest_id"])

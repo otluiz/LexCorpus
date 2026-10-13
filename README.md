@@ -30,7 +30,14 @@ mensagem estão em `schema/evento.schema.json` e `schema/sidecar.schema.json`.
                              em JSON), sequencial por banca
       statestore.py          SQLite com o que cada concurso já publicou:
                              re-run publica só o delta e o definitivo
-                             arquiva o preliminar (contrato §6.11)
+                             arquiva o preliminar (contrato §6.11);
+                             também a idempotência e as ligações com o
+                             LexPubli (ADR-0007)
+      consumidor.py          escuta os concursos aprovados no LexPubli e
+                             aplica a politica_coleta.yaml (ADR-0007)
+      alvos.py               resolve banca + concurso no alvo do spider
+      respostas.py           document.acquisition.* para o LexPubli
+      contratos_lexpubli.py  valida contra schema/lexpubli/v1/
       spiders/
         base.py              LexCorpusSpider — make_item (fábrica do
                              ArquivoItem do contrato v2.0)
@@ -211,6 +218,46 @@ Backends de busca: `--backend bing` (default, estável), `duckduckgo`,
 (ADR-0001: índice, nunca fonte de PDF) — o campo
 `confirmado_por_catálogo_do_órgão` indica que a banca+ano foram vistos em
 certames reais daquele órgão.
+
+## Concursos aprovados no LexPubli (ADR-0007)
+
+O LexPubli (portal público de concursos) publica `contest.discovery.created`
+quando a curadoria humana dele aprova um concurso. O **consumidor** recebe
+esse aviso e decide o que coletar, pela política versionada em
+`politica_coleta.yaml`: **o LexPubli avisa e o LexCorpus decide.**
+
+    python -m lexcorpus.consumidor                    # escuta a fila (RABBIT_ENABLED=true)
+    python -m lexcorpus.consumidor --arquivo ev.json  # processa um evento salvo (dev)
+    python -m lexcorpus.consumidor --sem-buscador     # só o concurso anunciado
+
+O que acontece com cada concurso aprovado:
+
+- **Catálogo:** entra em `vigentes`, com o `contest_id` do LexPubli.
+- **Concurso anunciado:** se a banca está em `bancas_validadas` e o alvo
+  sai das URLs oficiais do evento (ou da listagem pública da Cesgranrio),
+  vai para o **watchlist automático**, com o cron conforme a fase.
+- **Certames anteriores:** o buscador (ADR-0006) propõe; a política filtra
+  (confirmação no catálogo do órgão, score mínimo, no máximo 3 certames).
+- **O que a política não resolve** vira `document.acquisition.awaiting_operator`
+  para o operador: banca sem spider, alvo não identificado, candidata fraca.
+- **Respostas** ao LexPubli no exchange `lexcorpus.events`:
+  `document.acquisition.completed` (sai do pipeline, ao publicar o concurso
+  para o LexLearn), `.awaiting_operator` e `.failed`. O LexLearn se liga com
+  `concurso.#` e **não** as recebe. O contrato v2.1 não muda.
+
+Arquivos e caminhos:
+
+| O quê | Onde |
+| --- | --- |
+| Política | `politica_coleta.yaml` (versionada) |
+| Watchlist automático | `LEXCORPUS_WATCHLIST_AUTO` (default `state/watchlist.auto.yaml`; no Docker `/state`). **Gerado**: o `watchlist.yaml` manual continua soberano, e o scheduler ignora o alvo automático que repete um manual |
+| Contratos (cópia) | `schema/lexpubli/v1/`. O dono é o LexPubli; ver `schema/lexpubli/README.md` |
+| Catálogo do consumidor | `LEXCORPUS_CATALOGO` (no Docker `/state/catalogo.yaml`) |
+
+No container (o consumidor **não** monta `/data`, porque não toca em PDF):
+
+    docker compose -f docker-compose.crawler.yml -f docker-compose.lexlearn.yml \
+      --profile consumidor up -d consumidor
 
 ## Catálogo dinâmico
 

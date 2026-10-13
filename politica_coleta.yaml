@@ -1,0 +1,36 @@
+# politica_coleta.yaml — a política da coleta automática (ADR-0007)
+#
+# O consumidor do LexPubli NÃO pede aprovação caso a caso: ele aplica esta
+# política. O que ela não resolve vai para o operador (evento
+# document.acquisition.awaiting_operator). Mudar a política = commit aqui.
+#
+# Na dúvida, aperte: mandar caso demais ao operador custa tempo; coletar
+# certame errado polui o acervo do LexLearn.
+
+version: 1
+
+# Bancas com spider VALIDADO em crawl real, conferido pelo operador.
+# Uma banca só entra aqui depois disso.
+#   fcc: FORA por ora. O spider só funciona com ROBOTSTXT_OBEY=False, e o
+#        ADR-0007 manda respeitar o robots.txt na coleta automática. Os
+#        alvos FCC continuam no watchlist.yaml manual, sob decisão do operador.
+bancas_validadas: [cebraspe, fgv, cesgranrio]
+
+# Concurso ANUNCIADO (relation=current): a frequência segue a fase.
+cron_por_status:
+  previsto: "0 7 * * 1"                # 1x/semana
+  autorizado: "0 7 * * 1"
+  edital_aberto: "0 7 * * *"           # 1x/dia até a prova
+  inscricoes_encerradas: "0 7 * * *"
+  prova_realizada: "0 */6 * * *"       # 4x/dia: ciclo preliminar → definitivo
+  resultado: "0 6 * * *"
+  encerrado: "30 6 * * 1"
+
+# Certames ANTERIORES (relation=previous): o buscador do ADR-0006 propõe,
+# esta política filtra.
+anteriores:
+  ativo: true
+  max_certames: 3                       # por concurso anunciado
+  exige_confirmacao_orgao: true         # visto no catálogo do órgão (índice PCI)
+  score_minimo: 4                       # 4 = órgão e banca citados juntos
+  cron: "30 6 * * 1"                    # ciclo encerrado: 1x/semana basta

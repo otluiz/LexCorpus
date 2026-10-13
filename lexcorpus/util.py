@@ -10,7 +10,9 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+import time
 import unicodedata
+import uuid
 from pathlib import Path
 
 _SLUG_STRIP = re.compile(r"[^a-z0-9]+")
@@ -61,3 +63,18 @@ def atomic_move(origem: str | os.PathLike, destino: str | os.PathLike) -> None:
     destino = Path(destino)
     destino.parent.mkdir(parents=True, exist_ok=True)
     os.replace(origem, destino)
+
+
+def uuid7() -> uuid.UUID:
+    """UUIDv7 (RFC 9562): 48 bits de timestamp em ms + 74 bits aleatórios.
+
+    Pedido pelo envelope v1 dos contratos com o LexPubli (ordenável no tempo).
+    O módulo `uuid` só ganha uuid7() no Python 3.14. Mesmo algoritmo de
+    `concursos.util.uuid7` no LexPubli.
+    """
+    ms = time.time_ns() // 1_000_000
+    aleatorio = int.from_bytes(os.urandom(10), "big")
+    rand_a = (aleatorio >> 62) & 0xFFF
+    rand_b = aleatorio & ((1 << 62) - 1)
+    valor = (ms & ((1 << 48) - 1)) << 80 | 0x7 << 76 | rand_a << 64 | 0b10 << 62 | rand_b
+    return uuid.UUID(int=valor)

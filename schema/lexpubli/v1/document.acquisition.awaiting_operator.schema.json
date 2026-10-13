@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lex/lexpubli/events/v1/document.acquisition.awaiting_operator.schema.json",
+  "title": "document.acquisition.awaiting_operator - v1.0",
+  "description": "A política de coleta do LexCorpus (ADR-0007) não resolveu sozinha: o caso foi para a fila do operador. Não é erro. Emitido em lexcorpus.events.",
+  "allOf": [
+    { "$ref": "https://lex/lexpubli/events/v1/envelope.schema.json" },
+    {
+      "required": ["correlation_id"],
+      "properties": {
+        "event_type": { "const": "document.acquisition.awaiting_operator" },
+        "event_version": { "pattern": "^1\\.[0-9]+$" },
+        "producer": { "pattern": "^lexcorpus(/[a-z0-9_.-]+)?$" },
+        "correlation_id": { "$ref": "https://lex/lexpubli/events/v1/common.schema.json#/$defs/uuid" },
+        "data": { "$ref": "#/$defs/data" }
+      }
+    }
+  ],
+  "$defs": {
+    "data": {
+      "allOf": [{ "$ref": "https://lex/lexpubli/events/v1/common.schema.json#/$defs/acquisition_data_base" }],
+      "type": "object",
+      "required": ["contest_id", "relation", "reason"],
+      "additionalProperties": false,
+      "properties": {
+        "contest_id": true,
+        "relation": true,
+        "reason": {
+          "type": "string",
+          "enum": ["unknown_exam_board", "no_spider", "unresolved_target", "below_threshold", "volume_limit"],
+          "description": "unknown_exam_board: o concurso chegou sem banca; no_spider: banca sem spider validado; unresolved_target: banca validada, mas o alvo (slug/evento_id) não foi encontrado; below_threshold: candidatas do buscador abaixo dos limiares; volume_limit: excedeu o limite de certames anteriores."
+        },
+        "exam_board": {
+          "oneOf": [
+            { "$ref": "https://lex/lexpubli/events/v1/common.schema.json#/$defs/exam_board" },
+            { "type": "null" }
+          ]
+        },
+        "detail": { "type": "string", "maxLength": 2000, "description": "Explicação para humanos (opcional)." },
+        "candidates": {
+          "type": "array",
+          "maxItems": 10,
+          "description": "Para relation=previous: o que o buscador achou, para a curadoria e o operador avaliarem.",
+          "items": {
+            "type": "object",
+            "required": ["exam_board_slug", "year"],
+            "additionalProperties": false,
+            "properties": {
+              "exam_board_slug": { "$ref": "https://lex/lexpubli/events/v1/common.schema.json#/$defs/slug" },
+              "year": { "type": ["integer", "null"], "minimum": 1990, "maximum": 2100 },
+              "score": { "type": "number", "minimum": 0 },
+              "confirmed_by_organ_catalog": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "event_id": "01a132f0-d60d-71bc-bfbc-021403fdbc57",
+  "event_type": "contest.discovery.created",
+  "event_version": "1.0",
+  "occurred_at": "2026-10-13T01:46:46.669Z",
+  "producer": "lexpubli",
+  "correlation_id": null,
+  "data": {
+    "contest_id": "01a132f0-8537-7fdb-bd15-c39aa6c10f7e",
+    "contest_slug": "sefaz_al_2026",
+    "discovery_id": "01a132f0-85e2-750a-8ca3-2304c241214f",
+    "title": "Sefaz-AL 2026 — Auditor Fiscal",
+    "organ": { "slug": "sefaz_al", "name": "Secretaria de Estado da Fazenda de Alagoas" },
+    "exam_board": { "slug": "cebraspe", "name": "Cebraspe" },
+    "year": 2026,
+    "status": "edital_aberto",
+    "positions": [
+      {
+        "slug": "auditor_fiscal_da_administracao_tributaria_estadual_afte",
+        "name": "Auditor Fiscal da Administração Tributária Estadual (AFTE)",
+        "vacancies": 40,
+        "salary": 25270.68
+      }
+    ],
+    "registration": { "start": "2026-09-17", "end": "2026-10-21" },
+    "edital_url": "https://cdn.cebraspe.org.br/concursos/sefaz_al_26/arquivos/F317460224E42B1C2CF8434E69696571F3F5EDBE2EA2FFE3B2AC27139650B343.pdf",
+    "page_url": "http://localhost:8190/sefaz-al-2026/",
+    "source_url": "https://www.cebraspe.org.br/concursos/SEFAZ_AL_26"
+  }
+}

@@ -59,6 +59,41 @@
     cache. Política de expurgo, se um dia existir, será objeto de estudo.
 
 * Em andamento / próximos
+** EM-ANDAMENTO [#A] ADR-0007: consumidor do LexPubli + política de coleta  :ALINHAR_LexPubli:
+   ACEITO em 12/10, junto com o ADR-0002 do LexPubli (espelho). Revisa a
+   regra "promoção sempre manual" do ADR-0006: o operador define a POLÍTICA
+   (bancas validadas, limiares do buscador, limite de N certames
+   anteriores) e a política decide os casos de rotina.
+   Branch: feature/consumidor-lexpubli.
+   - [X] Aceite do ADR (dono do produto, 12/10)
+   - [X] lexcorpus/consumidor.py: fila lexcorpus.lexpubli.contests ligada a
+         lexpubli.events (contest.discovery.*), idempotência pelo event_id
+         (StateStore), dead-letter
+   - [X] Catálogo: upsert por contest_slug, guardando o contest_id
+   - [X] Política versionada: politica_coleta.yaml
+   - [X] Watchlist automático em arquivo separado; o scheduler junta os dois
+         e o manual é soberano
+   - [X] Emitir document.acquisition.* no envelope v1 (respostas.py); o
+         completed sai do EventoRabbitPipeline (aquisicao_lexpubli)
+   - [X] Serviço "consumidor" no docker-compose (sem montar /data)
+   - [X] 23 testes (tests/test_consumidor.py)
+   - [X] E2E real em 12/10 (notebook, broker do LexPubli): aprovação no
+         LexPubli → consumidor → watchlist automático → scheduler → crawl
+         Cebraspe sefaz_ce_21 (17 PDFs) → concurso.disponivel (válido no
+         v2.1, sem campo novo) + document.acquisition.completed (válido no
+         contrato v1 do LexPubli, correlation_id = event_id da aprovação)
+   - [ ] Revisar o ROBOTSTXT_OBEY=False da FCC (regra comum: respeitar
+         robots). Até lá a FCC fica FORA de bancas_validadas
+   - [ ] Conferir o SPIDERS_POR_BANCA: fcc ainda usa params "codigo", mas o
+         spider e o watchlist usam "slug"
+   - [ ] Catálogo: o consumidor escreve em LEXCORPUS_CATALOGO (/state no
+         Docker), e o catalogo.yaml do repositório é a semente versionada.
+         Decidir se o versionado é exportado do estado ou vice-versa
+   - [ ] completed.source_url: hoje é o fonte_url do concurso (o último PDF);
+         preferir a página/API oficial do concurso
+   - [ ] Contagem "prova" inclui padrão de resposta (item [#C] já existente)
+   - [ ] Buscador real no E2E (o teste usou --sem-buscador, para não depender
+         do motor de busca)
 ** FEITO [#A] StateStore + ciclo preliminar→definitivo (contrato §6.11)
    CLOSED: 2026-08-31
    O contrato modela o ciclo (vigente, substituido_por, concurso.

@@ -51,7 +51,8 @@ ENV LEXCORPUS_FILES_STORE=/data/raw/exams
 # estado persistente (StateStore SQLite + scheduler_state.json): montar um
 # volume em /state para o estado sobreviver entre crawls efêmeros
 ENV LEXCORPUS_STATE_DB=/state/lexcorpus_state.db \
-    LEXCORPUS_STATE_FILE=/state/scheduler_state.json
+    LEXCORPUS_STATE_FILE=/state/scheduler_state.json \
+    LEXCORPUS_WATCHLIST_AUTO=/state/watchlist.auto.yaml
 VOLUME /state
 
 # ENTRYPOINT = scrapy: o "comando" do container é o restante da linha scrapy

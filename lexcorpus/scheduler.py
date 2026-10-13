@@ -45,6 +45,8 @@ from croniter import croniter
 log = logging.getLogger("lexcorpus.scheduler")
 
 WATCHLIST_DEFAULT = Path(__file__).resolve().parent.parent / "watchlist.yaml"
+# gerado pelo consumidor do LexPubli (ADR-0007); fica no volume de estado
+WATCHLIST_AUTO_DEFAULT = Path("state/watchlist.auto.yaml")
 STATE_DEFAULT = Path("state/scheduler_state.json")
 
 # ---------------------------------------------------------------------------
@@ -79,6 +81,23 @@ def carregar_watchlist(path: Path) -> list[dict]:
                 "cron": entrada.get("cron"),
                 "rotulo": _rotulo(entrada),
             })
+    return alvos
+
+
+def carregar_alvos(manual: Path, auto: Path | None = None) -> list[dict]:
+    """Watchlist manual + automático (ADR-0007). O MANUAL É SOBERANO: um alvo
+    automático com a mesma chave (spider + params) de um manual é ignorado,
+    e vale o cron/settings que o operador escolheu."""
+    alvos = carregar_watchlist(manual)
+    if auto is None or not Path(auto).exists():
+        return alvos
+    vistas = {a["chave"] for a in alvos}
+    for alvo in carregar_watchlist(auto):
+        if alvo["chave"] in vistas:
+            log.debug("alvo automático já no manual, ignorado: %s", alvo["chave"])
+            continue
+        vistas.add(alvo["chave"])
+        alvos.append(dict(alvo, rotulo=alvo["rotulo"] + " (auto)"))
     return alvos
 
 
@@ -224,7 +243,7 @@ def verificar_spiders(alvos: list[dict]) -> None:
 
 
 def uma_passada(args, running: set) -> int:
-    alvos = carregar_watchlist(args.watchlist)
+    alvos = carregar_alvos(args.watchlist, getattr(args, "watchlist_auto", None))
     estado = carregar_estado(args.state_file)
     agora = datetime.now(timezone.utc).astimezone()  # tz local do container
     vencidos = alvos_vencidos(alvos, estado, agora)
@@ -246,6 +265,9 @@ def main(argv=None) -> int:
     )
     ap.add_argument("--watchlist", type=Path, default=Path(
         os.environ.get("LEXCORPUS_WATCHLIST", WATCHLIST_DEFAULT)))
+    ap.add_argument("--watchlist-auto", type=Path, default=Path(
+        os.environ.get("LEXCORPUS_WATCHLIST_AUTO", WATCHLIST_AUTO_DEFAULT)),
+        help="watchlist gerado pelo consumidor do LexPubli (ADR-0007)")
     ap.add_argument("--state-file", type=Path, default=Path(
         os.environ.get("LEXCORPUS_STATE_FILE", STATE_DEFAULT)))
     modo = ap.add_mutually_exclusive_group()
@@ -265,7 +287,7 @@ def main(argv=None) -> int:
     )
 
     running: set = set()
-    alvos = carregar_watchlist(args.watchlist)
+    alvos = carregar_alvos(args.watchlist, args.watchlist_auto)
     verificar_spiders(alvos)
 
     if not args.loop:

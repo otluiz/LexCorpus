@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lex/lexpubli/events/v1/envelope.schema.json",
+  "title": "Envelope de evento do ecossistema Lex - v1",
+  "description": "Envelope comum aos eventos dos contratos novos do ecossistema Lex (lexpubli.events e as respostas document.acquisition.* em lexcorpus.events). O conteúdo de cada evento vai em 'data', validado pelo schema do event_type. Dono: LexPubli. O contrato v2.1 LexCorpus -> LexLearn (concurso.*) NÃO usa este envelope.",
+  "type": "object",
+  "required": [
+    "event_id",
+    "event_type",
+    "event_version",
+    "occurred_at",
+    "producer",
+    "correlation_id",
+    "data"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "UUIDv7 único por evento. Chave de idempotência do consumidor. Nunca reutilizar."
+    },
+    "event_type": {
+      "type": "string",
+      "pattern": "^[a-z]+(\\.[a-z_]+)+$",
+      "description": "lowercase.dot.case. Também é a routing key no exchange."
+    },
+    "event_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$",
+      "description": "MAJOR.MINOR do schema de 'data'. Mudança incompatível = novo MAJOR."
+    },
+    "occurred_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$",
+      "description": "ISO 8601 em UTC, sufixo Z obrigatório."
+    },
+    "producer": {
+      "type": "string",
+      "pattern": "^(lexpubli|lexcorpus|lexlearn)(/[a-z0-9_.-]+)?$",
+      "description": "Quem emitiu: o projeto, opcionalmente com o componente ('lexcorpus/consumidor'). Cada schema de evento restringe o produtor."
+    },
+    "correlation_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid",
+      "description": "Liga eventos de uma mesma operação (ex.: a requisição de aquisição e sua resposta). null quando o evento inicia a cadeia."
+    },
+    "data": {
+      "type": "object"
+    }
+  }
+}
