@@ -59,6 +59,18 @@
     cache. Política de expurgo, se um dia existir, será objeto de estudo.
 
 * Em andamento / próximos
+** TODO [#A] ADR-0009: varredura por carreira (fonte 2 do related)
+   PROPOSTO em 13/10. Decidido pelo dono do produto: começar por fiscal e
+   tribunais, até 5 concursos por carreira e banca. A carreira é o eixo da
+   BUSCA; a coleta continua nos spiders de banca.
+   - [ ] Aceite do ADR
+   - [ ] carreiras_regras.yaml + sugestão (nunca grava sozinha)
+   - [ ] inventariar: FGV e Cesgranrio (listagens oficiais)
+   - [ ] inventariar: Cebraspe (índice PCI + confirmação na API por slug;
+         a API não lista eventos e o sitemap não tem concursos)
+   - [ ] revisar em lote + descartados
+   - [ ] política varredura + watchlist.varredura.yaml + scheduler
+   - [ ] Medir a profundidade do histórico do PortalEventos (Cesgranrio)
 ** FEITO [#A] ADR-0008: relação related (concurso-alvo)            :ALINHAR_LexPubli:
    ACEITO em 13/10, espelho do ADR-0004 do LexPubli. Mesma banca + mesma
    carreira, em outros órgãos; acervo primeiro (completed na hora).
