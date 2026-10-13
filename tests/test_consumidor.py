@@ -592,3 +592,42 @@ def test_catalogo_de_estado_nasce_da_semente_e_depois_e_dele(tmp_path):
     Catalogo(estado).marcar_carreira("prf_21", "policial", organ="PRF", banca="cebraspe",
                                      edital_ano=2021)
     assert "prf_21" in Catalogo.com_semente(estado, semente).dados["passados"]  # não recopia
+
+
+# -- só objetivas: o discursivo fica fora (antes do download e no estado) ----
+
+from scrapy.exceptions import DropItem
+from lexcorpus.pipelines import FiltroObjetivasPipeline
+
+
+@pytest.mark.parametrize("nome,sai", [
+    ("SEEC_AUDITOR_19_PADRO_DE_RESPOSTA_DEFINITIVO_COMPLETO.PDF", True),
+    ("MATRIZ_504_SEECDF001_JUSTIFICATIVA.PDF", True),
+    ("515_SEFAZAL_001_01_DISC.PDF", True),
+    ("505_SEECDF_001_01.PDF", False),
+])
+def test_filtro_descarta_discursivo_antes_do_download(nome, sai):
+    it = ArquivoItem(nome=nome, papel="prova", fonte_url=f"https://cdn/x/{nome}",
+                     file_urls=[f"https://cdn/x/{nome}"])
+    if sai:
+        with pytest.raises(DropItem):
+            FiltroObjetivasPipeline().process_item(it, FakeSpider())
+    else:
+        assert FiltroObjetivasPipeline().process_item(it, FakeSpider()) is it
+
+
+def test_discursivo_ja_coletado_nao_e_relistado_nem_contado(tmp_path):
+    """Coletado antes do filtro (ex.: gpu01, 13/10): fica fora do aviso e da
+    contagem, sem apagar nada."""
+    with StateStore(tmp_path / "state" / "s.db") as st:
+        st.upsert_arquivos([{"banca": "cebraspe", "concurso": "sefaz_al_19", "nome": n,
+                             "papel": "prova", "cargos": ["auditor_fiscal"],
+                             "checksum_sha256": n, "tamanho_bytes": 1}
+                            for n in ("antiga.pdf", "X_PADRAORESPOSTA_CARGO_1.PDF")])
+        assert st.contagem_vigentes("cebraspe", "sefaz_al_19")["prova"] == 1
+
+    crawl(tmp_path, [item(tmp_path, "antiga.pdf", "prova"),
+                     item(tmp_path, "gab_def.pdf", "gabarito_definitivo")])
+    ev = json.loads((tmp_path / "eventos" / "sefaz_al_19.json").read_text(encoding="utf-8"))
+    assert ev["event"] == "concurso.atualizado"
+    assert sorted(a["nome"] for a in ev["arquivos"]) == ["antiga.pdf", "gab_def.pdf"]

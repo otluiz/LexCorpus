@@ -30,6 +30,7 @@ from itemadapter import ItemAdapter
 from scrapy.exceptions import DropItem
 from scrapy.pipelines.files import FileException, FilesPipeline
 
+from .heuristics import eh_discursivo
 from .statestore import StateStore
 from .util import sha256_file, atomic_write_bytes
 
@@ -67,6 +68,20 @@ def ajustar_a_versao(arq: dict, versao: str) -> dict:
 # ---------------------------------------------------------------------------
 # 1. Download — FilesPipeline customizado
 # ---------------------------------------------------------------------------
+class FiltroObjetivasPipeline:
+    """Rede de segurança ANTES do download: material discursivo (padrão de
+    resposta, prova discursiva, justificativa...) não entra no storage do
+    LexLearn, qualquer que seja o spider. Depois do download seria tarde:
+    sobraria um PDF sem sidecar na pasta do concurso."""
+
+    def process_item(self, item, spider):
+        adapter = ItemAdapter(item)
+        urls = " ".join(adapter.get("file_urls") or [])
+        if eh_discursivo(adapter.get("nome") or "", adapter.get("fonte_url") or "", urls):
+            raise DropItem(f"discursivo, fora do escopo (só objetivas): {adapter.get('nome')}")
+        return item
+
+
 class LexCorpusFilesPipeline(FilesPipeline):
     """Baixa o PDF preservando o nome original numa pasta plana por concurso.
 
@@ -319,7 +334,9 @@ class EventoRabbitPipeline:
         """
         banca, concurso = dados["banca"], dados["concurso"]
         atuais = {a["nome"]: a for a in dados["arquivos"]}
-        anteriores = self._store.carregar_concurso(banca, concurso)
+        # o discursivo coletado antes do filtro não volta a ser listado
+        anteriores = {n: r for n, r in self._store.carregar_concurso(banca, concurso).items()
+                      if not eh_discursivo(n)}
 
         if not anteriores:
             self._store.upsert_arquivos(

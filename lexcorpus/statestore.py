@@ -226,7 +226,9 @@ class StateStore:
 
     def contagem_vigentes(self, banca: str, concurso: str) -> dict[str, int] | None:
         """Arquivos VIGENTES por papel, ou None se o concurso nunca foi visto."""
-        rows = self.carregar_concurso(banca, concurso)
+        from .heuristics import eh_discursivo
+        rows = {n: r for n, r in self.carregar_concurso(banca, concurso).items()
+                if not eh_discursivo(n)}       # discursivo coletado antes do filtro
         if not rows:
             return None
         contagem = dict.fromkeys(PAPEIS, 0)

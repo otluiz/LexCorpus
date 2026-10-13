@@ -17,7 +17,9 @@ A API separa arquivos em:
 Classificação de papel vem da descricaoArquivo (confiável, não heurística):
   "GABARITO DEFINITIVO ..."  -> gabarito_definitivo
   "GABARITO PRELIMINAR ..."  -> gabarito_preliminar
-  "PROVA OBJETIVA ...", "PROVA DISCURSIVA ...", "PADRÃO DE RESPOSTA ..." -> prova
+  "PROVA OBJETIVA ..."  -> prova
+  "PROVA DISCURSIVA ...", "PADRÃO DE RESPOSTA ...", justificativas -> None
+                           (descartados: o LexLearn só trata objetivas)
 """
 from __future__ import annotations
 
@@ -26,6 +28,7 @@ import re
 
 import scrapy
 
+from ..heuristics import eh_discursivo
 from ..items import ArquivoItem
 from ..util import slugify
 
@@ -36,7 +39,7 @@ CDN_BASE = "https://cdn.cebraspe.org.br/concursos/{slug}/arquivos/{nome}"
 _RE_GAB_DEF = re.compile(r"gabarito\s+definitiv", re.I)
 _RE_GAB_PRE = re.compile(r"gabarito\s+preliminar", re.I)
 _RE_GAB = re.compile(r"gabarito", re.I)
-_RE_PROVA = re.compile(r"prova|padr[ãa]o\s+de\s+resposta|caderno", re.I)
+_RE_PROVA = re.compile(r"prova|caderno", re.I)
 
 
 def classificar_papel(descricao: str, nome: str) -> str | None:
@@ -45,6 +48,8 @@ def classificar_papel(descricao: str, nome: str) -> str | None:
     Retorna None se não for prova nem gabarito (ex.: edital que escapou).
     """
     alvo = f"{descricao} {nome}".lower()
+    if eh_discursivo(descricao, nome):
+        return None
     if _RE_GAB_DEF.search(alvo):
         return "gabarito_definitivo"
     if _RE_GAB_PRE.search(alvo):

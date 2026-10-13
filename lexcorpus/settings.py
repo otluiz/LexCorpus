@@ -77,6 +77,7 @@ EVENTOS_OUT_DIR = os.environ.get("EVENTOS_OUT_DIR", "eventos_debug")  # usado qu
 
 # --- Cadeia de pipelines -----------------------------------------------------
 ITEM_PIPELINES = {
+    "lexcorpus.pipelines.FiltroObjetivasPipeline": 50,   # descarta discursivo ANTES de baixar
     "lexcorpus.pipelines.LexCorpusFilesPipeline": 100,   # baixa o PDF
     "lexcorpus.pipelines.SidecarPipeline": 200,          # checksum + sidecar
     "lexcorpus.pipelines.EventoRabbitPipeline": 300,     # publica evento

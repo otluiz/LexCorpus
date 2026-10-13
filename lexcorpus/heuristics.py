@@ -32,7 +32,32 @@ import re
 RE_GAB_DEF = re.compile(r"gabarito.*(definitiv|final|p[óo]s.?recurs)", re.I)
 RE_GAB_PRE = re.compile(r"gabarito.*(preliminar|provis[óo]ri)", re.I)
 RE_GAB = re.compile(r"gabarito|gab[\W_]", re.I)
-RE_PROVA = re.compile(r"prova|caderno|padr[ãa]o\s+de\s+resposta", re.I)
+RE_PROVA = re.compile(r"prova|caderno", re.I)
+
+# Material DISCURSIVO: o LexLearn só trata questões objetivas (C/E na
+# Cebraspe, A-E nas outras bancas), que precisam casar prova com gabarito.
+# Padrão de resposta, prova discursiva, estudo de caso, redação, peça e as
+# justificativas de alteração de gabarito não são prova nem gabarito de
+# objetiva: são descartados na coleta, como editais. Inclui os nomes reais da
+# Cebraspe: "PADRAORESPOSTA", "PADRO_DE_RESPOSTA" (o Ã some), "_DISC.PDF".
+RE_DISCURSIVO = re.compile(
+    r"padr[ãa]?o[\s_-]*(?:de[\s_-]*)?resposta"
+    r"|discursiv"
+    r"|(?<![a-z])disc(?![a-z])"
+    r"|estudo[\s_-]*de[\s_-]*caso"
+    r"|reda[çc][ãa]o"
+    r"|pe[çc]a[\s_-]+(?:pr[áa]tica|processual|profissional|t[ée]cnica)"
+    r"|justificativa",
+    re.I,
+)
+RE_OBJETIVA = re.compile(r"objetiv", re.I)
+
+
+def eh_discursivo(*textos: str) -> bool:
+    """True para material só discursivo. Um caderno "objetiva e discursiva"
+    no mesmo PDF fica: ele tem as questões objetivas."""
+    alvo = " ".join(t for t in textos if t)
+    return bool(RE_DISCURSIVO.search(alvo)) and not RE_OBJETIVA.search(alvo)
 
 # PDFs a descartar: editais, convocações, resultados etc.
 # Versão FRACA: só descarta se não houver pista de prova/gabarito (ver
@@ -90,6 +115,8 @@ def classificar_papel(
     prova = re_prova or RE_PROVA
 
     if not eh_relevante(texto, url, re_descartar=re_descartar):
+        return None
+    if eh_discursivo(texto, url):
         return None
 
     if gab_pre.search(alvo):

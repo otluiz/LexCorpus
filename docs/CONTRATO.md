@@ -249,6 +249,11 @@ por conta própria.
 10. **Escreva apenas em `exams/`.** Nunca em `laws/`, nunca no banco.
 11. Ao sair o definitivo: publique `concurso.atualizado`, adicione o definitivo e marque o
     preliminar com `vigente: false` + `substituido_por`.
+12. **Só questões objetivas.** O LexLearn trata questões Certo/Errado (Cebraspe) e de
+    múltipla escolha (A–E), casando cada prova com o seu gabarito. Material discursivo
+    não é entregue: prova discursiva, padrão de resposta, estudo de caso, redação, peça
+    e as justificativas de alteração de gabarito. Um caderno "objetiva e discursiva"
+    no mesmo PDF é entregue (tem as objetivas). Sem mudança de schema.
 
 ---
 
@@ -279,8 +284,6 @@ por conta própria.
 
 - Nível de detalhe viável em `segmentos` (página exata? âncora? só a lista de cargos?) —
   depende do que o scraper consegue extrair de cada banca.
-- `papel` para padrão de resposta de discursiva: hoje sai como `prova`, embora faça as
-  vezes de gabarito (ex.: `PRF_21_PADRAO_DE_RESPOSTA_DEFINITIVO.PDF`).
 - Vocabulário de slugs de cargo (normalização fica no LexLearn, mas convém combinar os mais
   comuns).
 - Nomes definitivos de exchange e routing keys.

@@ -13,8 +13,13 @@ def test_classificar():
     assert classificar_papel("GABARITO DEFINITIVO - ITENS", "GAB_DEFINITIVO_x.PDF") == "gabarito_definitivo"
     assert classificar_papel("GABARITO PRELIMINAR - 1.ª PROVA", "GAB_PRELIMINAR_x.PDF") == "gabarito_preliminar"
     assert classificar_papel("PROVA OBJETIVA - ITENS DE 9 A 120", "578_PRF_001.PDF") == "prova"
-    assert classificar_papel("PROVA DISCURSIVA", "x.PDF") == "prova"
-    assert classificar_papel("PADRÃO DE RESPOSTA DEFINITIVO", "x.PDF") == "prova"
+    # discursivo fica fora: o LexLearn só trata objetivas (C/E, A-E)
+    assert classificar_papel("PROVA DISCURSIVA", "x.PDF") is None
+    assert classificar_papel("PADRÃO DE RESPOSTA DEFINITIVO", "x.PDF") is None
+    assert classificar_papel("", "SEEC_AUDITOR_19_PADRO_DE_RESPOSTA_DEFINITIVO.PDF") is None
+    assert classificar_papel("", "SEFAZAL515002A02E3425_PADRAORESPOSTA_CARGO_2_.PDF") is None
+    assert classificar_papel("", "MATRIZ_504_SEECDF001_JUSTIFICATIVA.PDF") is None
+    assert classificar_papel("", "515_SEFAZAL_001_01_DISC.PDF") is None
     assert classificar_papel("Edital nº 1 - Abertura", "ED_1.PDF") is None
     print("[OK] classificação por descricaoArquivo (prova/gab_def/gab_prelim/None)")
 
@@ -25,8 +30,10 @@ def test_parse_api():
     resp = make_response("https://apis.cebraspe.org.br/cebraspe/eventos/prf_21", body)
     items = list(spider.parse_api(resp))
 
-    # 8 arquivos em arquivosGabarito, todos PDF, todos prova/gabarito
-    assert len(items) == 8, f"esperava 8, veio {len(items)}"
+    # 8 PDFs em arquivosGabarito; a prova discursiva e o padrão de resposta
+    # ficam fora (só objetivas): 6
+    assert len(items) == 6, f"esperava 6, veio {len(items)}"
+    assert not any("DISCURSIVA" in it["nome"] or "PADRAO" in it["nome"] for it in items)
     papeis = {}
     for it in items:
         papeis[it["papel"]] = papeis.get(it["papel"], 0) + 1
@@ -59,14 +66,16 @@ def test_multicargo_prova_de_um_cargo():
     """Concurso com 4 cargos: 'PROVA OBJETIVA - CARGO 2' é de UM cargo só,
     não multi_cargo — o número vem da descricaoArquivo e casa com eventoCargos."""
     itens = _itens_sefazce()
-    assert len(itens) == 17
+    # 17 PDFs; as 4 discursivas e os 4 padrões de resposta ficam fora
+    assert len(itens) == 9
+    assert not [n for n in itens if "DISC" in n or "PADRO" in n]
     prova = itens["MATRIZ_598_SEFAZ_002.PDF"]
     assert prova["papel"] == "prova"
     assert prova["cargos"] == ["auditor_fiscal_contabil_financeiro_da_receita_estadual"]
     assert prova["multi_cargo"] is False
-    disc = itens["598_SEFAZ_004_DISC.PDF"]
-    assert disc["cargos"] == ["auditor_fiscal_de_tecnologia_da_informacao_da_receita_estadual"]
-    assert disc["multi_cargo"] is False
+    ti = itens["MATRIZ_598_SEFAZ_004.PDF"]
+    assert ti["cargos"] == ["auditor_fiscal_de_tecnologia_da_informacao_da_receita_estadual"]
+    assert ti["multi_cargo"] is False
 
 
 def test_multicargo_gabarito_de_um_cargo():

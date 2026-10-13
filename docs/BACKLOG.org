@@ -180,7 +180,8 @@
          Decidir se o versionado é exportado do estado ou vice-versa
    - [ ] completed.source_url: hoje é o fonte_url do concurso (o último PDF);
          preferir a página/API oficial do concurso
-   - [ ] Contagem "prova" inclui padrão de resposta (item [#C] já existente)
+   - [X] Contagem "prova" incluía padrão de resposta: o discursivo agora
+         fica fora da coleta e da contagem
    - [ ] Buscador real no E2E (o teste usou --sem-buscador, para não depender
          do motor de busca)
 ** FEITO [#A] StateStore + ciclo preliminar→definitivo (contrato §6.11)
@@ -389,9 +390,23 @@
    - [ ] Não inventar: se não der para extrair, omite (contrato §5, caso C)
    - Não bloqueia nada; refinamento contínuo
 
-** TODO [#C] "Padrão de resposta" da discursiva hoje vira papel=prova
-   Registrado no comunicado como comportamento conhecido. O LexLearn tem
-   autoridade para reclassificar. Revisitar só se virar ruído real.
+** FEITO [#B] Material discursivo fora da coleta (padrão de resposta, discursiva, justificativa)
+   CLOSED: 2026-10-13
+   Virou ruído real no gpu01 (SEEC_AUDITOR_19_PADRO_DE_RESPOSTA... chegou
+   ao LexLearn como prova). Decisão do dono do produto: o LexLearn só trata
+   objetivas (C/E na Cebraspe, A-E nas outras) e casa cada prova com o seu
+   gabarito; discursivo é DESCARTADO. Nada de papel novo no contrato (a
+   tentativa v2.2 foi desfeita antes do push).
+   - [X] heuristics.eh_discursivo (nomes reais: PADRAORESPOSTA,
+         PADRO_DE_RESPOSTA, _DISC.PDF; JUSTIFICATIVA); "objetiva e
+         discursiva" no mesmo PDF fica
+   - [X] Spider Cebraspe e heurística comum devolvem None
+   - [X] FiltroObjetivasPipeline (prioridade 50) ANTES do download, para
+         todas as bancas
+   - [X] Estado: o discursivo coletado antes não é relistado nem contado
+   - [X] CONTRATO.md §6 regra 12 (sem mudança de schema)
+   - [ ] Os PDFs discursivos já entregues no gpu01 continuam na pasta do
+         LexLearn: remover é decisão do Administrador
 
 * Docker / profissionalização
 ** FEITO [#A] Dockerfile multi-stage (base + base-playwright)
