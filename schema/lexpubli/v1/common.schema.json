@@ -259,7 +259,7 @@
         "source_url": {
           "type": "string",
           "format": "uri",
-          "description": "Fonte onde a descoberta foi feita."
+          "description": "Página oficial de onde vieram os dados do concurso (ADR-0002: nunca um agregador)."
         }
       }
     }
