@@ -1,0 +1,42 @@
+# docker-compose.lexpubli.yml — a ponte para o broker do LexPubli
+#
+# LexPubli ADR-0005 §2a: a automação LexPubli <-> LexCorpus (contest.discovery.*
+# e as respostas document.*) passa pelo broker PRÓPRIO do LexPubli, nunca pelo
+# do LexLearn. Este overlay põe os serviços na rede `lexpubli-broker` (criada
+# pelo compose do LexPubli) e passa a LEXPUBLI_RABBIT_URL.
+#
+# O host é `lexpubli-rabbitmq`, NUNCA `rabbitmq`: o crawl também está na rede
+# do LexLearn, onde `rabbitmq` é o broker de lá.
+#
+#   # no .env deste repositório (não versionado), a senha do usuário lexcorpus
+#   # (BROKER_LEXCORPUS_PASSWORD do .env do LexPubli):
+#   LEXPUBLI_RABBIT_URL=amqp://lexcorpus:<senha>@lexpubli-rabbitmq:5672/lexpubli
+#
+#   # consumidor: SÓ este overlay. Ele não fala com o LexLearn e não entra na
+#   # rede dele.
+#   docker compose -f docker-compose.crawler.yml -f docker-compose.lexpubli.yml \
+#     --profile consumidor up -d consumidor
+#
+#   # crawl: os dois overlays, o do LexLearn (v2.1) e este (respostas)
+#   docker compose -f docker-compose.crawler.yml -f docker-compose.lexlearn.yml \
+#     -f docker-compose.lexpubli.yml run --rm lexcorpus crawl cebraspe -a slug=prf_21
+
+# Mesmo nome de projeto do overlay do LexLearn: o volume de estado tem de ser o
+# mesmo (lexcorpus_lexcorpus-state) para o consumidor e os crawls.
+name: lexcorpus
+
+services:
+  consumidor:
+    environment:
+      LEXPUBLI_RABBIT_URL: ${LEXPUBLI_RABBIT_URL:?defina LEXPUBLI_RABBIT_URL no .env}
+    networks: [lexpubli]
+
+  lexcorpus:
+    environment:
+      LEXPUBLI_RABBIT_URL: ${LEXPUBLI_RABBIT_URL:?defina LEXPUBLI_RABBIT_URL no .env}
+    networks: [default, lexpubli]
+
+networks:
+  lexpubli:
+    name: lexpubli-broker
+    external: true

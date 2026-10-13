@@ -106,8 +106,10 @@ services:
   # Consumidor dos concursos aprovados no LexPubli (ADR-0007). Processo de
   # LONGA duração, ao contrário dos crawls: escuta lexpubli.events, aplica a
   # politica_coleta.yaml e responde document.acquisition.* em lexcorpus.events.
+  # Tudo isso no broker do LEXPUBLI (LexPubli ADR-0005 §2a), pelo overlay
+  # docker-compose.lexpubli.yml, que traz a LEXPUBLI_RABBIT_URL:
   #
-  #   docker compose -f docker-compose.crawler.yml -f docker-compose.lexlearn.yml \
+  #   docker compose -f docker-compose.crawler.yml -f docker-compose.lexpubli.yml \
   #     --profile consumidor up -d consumidor
   #
   # NÃO monta /data: o consumidor não lê nem escreve PDF (quem coleta é o
@@ -121,8 +123,6 @@ services:
     entrypoint: ["python", "-m", "lexcorpus.consumidor"]
     command: []
     environment:
-      RABBIT_ENABLED: "true"
-      RABBIT_URL: amqp://guest:guest@rabbitmq:5672/
       # o catálogo alimentado pelo consumidor vive no estado (o catalogo.yaml
       # do repositório é a semente versionada; ver README)
       LEXCORPUS_CATALOGO: /state/catalogo.yaml

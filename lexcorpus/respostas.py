@@ -4,10 +4,10 @@
 #           envelope v1, validadas contra schema/lexpubli/v1/ antes de sair.
 """Respondedor: monta, valida e publica as respostas ao LexPubli.
 
-Destino: o exchange `lexcorpus.events` (o mesmo do contrato v2.1), com
-routing key = event_type. O LexLearn se liga com `concurso.#`, então não
-recebe estas mensagens. Sem broker (RABBIT_ENABLED desligado), grava em
-{EVENTOS_OUT_DIR}/respostas/ como os eventos de dev do pipeline.
+Destino: o exchange `lexcorpus.events` do broker do LEXPUBLI
+(LEXPUBLI_RABBIT_URL; LexPubli ADR-0005 §2a), com routing key = event_type.
+Estas mensagens nunca passam pelo broker do LexLearn. Sem broker
+(LEXPUBLI_RABBIT_URL vazia), grava em {EVENTOS_OUT_DIR}/respostas/.
 
 As respostas NUNCA carregam caminho de storage (ADR-0002 §3).
 """

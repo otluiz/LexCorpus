@@ -68,6 +68,11 @@ RABBIT_URL = os.environ.get("RABBIT_URL", "amqp://guest:guest@localhost:5672/")
 RABBIT_EXCHANGE = "lexcorpus.events"
 RABBIT_ROUTING_DISPONIVEL = "concurso.disponivel"
 RABBIT_ROUTING_ATUALIZADO = "concurso.atualizado"
+# Broker do LexPubli (LexPubli ADR-0005 §2a): a automação LexPubli <-> LexCorpus
+# (consumidor e respostas document.*) NÃO passa pelo broker do LexLearn. A
+# RABBIT_URL acima fica só com o contrato v2.1. Vazio = respostas em disco.
+LEXPUBLI_RABBIT_URL = os.environ.get("LEXPUBLI_RABBIT_URL", "")
+LEXPUBLI_RESPOSTA_EXCHANGE = "lexcorpus.events"
 EVENTOS_OUT_DIR = os.environ.get("EVENTOS_OUT_DIR", "eventos_debug")  # usado quando RABBIT_ENABLED=False
 
 # --- Cadeia de pipelines -----------------------------------------------------

@@ -336,11 +336,11 @@ def item(store_root, nome, papel):
     return it
 
 
-def crawl(tmp_path, itens):
+def crawl(tmp_path, itens, **extra):
     settings = FakeSettings({
         "FILES_STORE": str(tmp_path), "RABBIT_ENABLED": False,
         "EVENTOS_OUT_DIR": str(tmp_path / "eventos"),
-        "LEXCORPUS_STATE_DB": str(tmp_path / "state" / "s.db")})
+        "LEXCORPUS_STATE_DB": str(tmp_path / "state" / "s.db"), **extra})
     sidecar, pipe, spider = SidecarPipeline(store_root=str(tmp_path)), EventoRabbitPipeline(settings), FakeSpider()
     pipe.open_spider(spider)
     for it in itens:
@@ -376,3 +376,70 @@ def test_pipeline_responde_completed_ao_publicar_concurso_ligado(tmp_path):
 def test_pipeline_sem_ligacao_nao_responde(tmp_path):
     crawl(tmp_path, [item(tmp_path, "prova.pdf", "prova")])
     assert respostas(tmp_path) == []
+
+
+# -- broker do LexPubli separado (LexPubli ADR-0005 §2a) ---------------------
+
+class CanalFalso:
+    def __init__(self):
+        self.publicadas = []
+
+    def basic_publish(self, exchange, routing_key, body, properties=None):
+        self.publicadas.append((exchange, routing_key, json.loads(body)))
+
+
+class ConexaoFalsa:
+    urls = []
+
+    def __init__(self, params):
+        ConexaoFalsa.urls.append(params)
+        self.canal, self.is_open = CanalFalso(), True
+
+    def channel(self):
+        return self.canal
+
+    def close(self):
+        self.is_open = False
+
+
+def test_respostas_vao_para_o_broker_do_lexpubli(tmp_path, monkeypatch):
+    import pika
+    criadas = []
+
+    def fabrica(params):
+        criadas.append(ConexaoFalsa(params))
+        return criadas[-1]
+
+    monkeypatch.setattr(pika, "BlockingConnection", fabrica)
+    monkeypatch.setattr(pika, "URLParameters", lambda url: url)
+    with StateStore(tmp_path / "state" / "s.db") as st:
+        st.registrar_aquisicao("cebraspe", "sefaz_al_19", EXEMPLO["data"]["contest_id"],
+                               EXEMPLO["event_id"], "previous", ano=2019)
+
+    url = "amqp://lexcorpus:x@lexpubli-rabbitmq:5672/lexpubli"
+    crawl(tmp_path, [item(tmp_path, "prova.pdf", "prova")], LEXPUBLI_RABBIT_URL=url)
+
+    # uma conexão só, a do LexPubli (o v2.1 está desligado neste teste)
+    assert [c.is_open for c in criadas] == [False]
+    assert ConexaoFalsa.urls[-1] == url
+    [(exchange, rk, env)] = criadas[0].canal.publicadas
+    assert (exchange, rk) == ("lexcorpus.events", "document.acquisition.completed")
+    assert env["correlation_id"] == EXEMPLO["event_id"]
+    assert respostas(tmp_path) == []          # nada em disco
+
+
+def test_sem_ligacao_nao_abre_o_broker_do_lexpubli(tmp_path, monkeypatch):
+    import pika
+    monkeypatch.setattr(pika, "BlockingConnection", lambda p: pytest.fail("conectou"))
+    crawl(tmp_path, [item(tmp_path, "prova.pdf", "prova")],
+          LEXPUBLI_RABBIT_URL="amqp://x@lexpubli-rabbitmq/lexpubli")
+
+
+def test_consumidor_nao_usa_o_broker_do_lexlearn(monkeypatch, capsys):
+    from lexcorpus import consumidor
+    monkeypatch.delenv("LEXPUBLI_RABBIT_URL", raising=False)
+    monkeypatch.setenv("RABBIT_ENABLED", "true")
+    monkeypatch.setenv("RABBIT_URL", "amqp://guest:guest@rabbitmq:5672/")
+    monkeypatch.setattr(consumidor, "escutar", lambda *a: pytest.fail("escutou no broker do LexLearn"))
+    assert consumidor.main([]) == 2
+    assert "LEXPUBLI_RABBIT_URL" in capsys.readouterr().err

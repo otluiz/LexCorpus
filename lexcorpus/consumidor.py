@@ -51,6 +51,7 @@ POLITICA_PADRAO = RAIZ / "politica_coleta.yaml"
 WATCHLIST_AUTO_PADRAO = Path("state/watchlist.auto.yaml")
 FILA = "lexcorpus.lexpubli.contests"
 FILA_DLQ = "lexcorpus.lexpubli.contests.dlq"
+DLX = "lexcorpus.lexpubli.dlx"
 
 
 class ContratoInvalido(Exception):
@@ -298,9 +299,13 @@ def escutar(ctx_fabrica: Callable[[object], Contexto], url: str,
     canal = conexao.channel()
     canal.exchange_declare(exchange=exchange_lexpubli, exchange_type="topic", durable=True)
     canal.exchange_declare(exchange=exchange_resposta, exchange_type="topic", durable=True)
+    # DLX próprio, não o exchange padrão: o usuário lexcorpus do broker do
+    # LexPubli não tem escrita em amq.default (que alcançaria qualquer fila).
+    canal.exchange_declare(exchange=DLX, exchange_type="direct", durable=True)
     canal.queue_declare(queue=FILA_DLQ, durable=True)
+    canal.queue_bind(queue=FILA_DLQ, exchange=DLX, routing_key=FILA_DLQ)
     canal.queue_declare(queue=FILA, durable=True, arguments={
-        "x-dead-letter-exchange": "", "x-dead-letter-routing-key": FILA_DLQ})
+        "x-dead-letter-exchange": DLX, "x-dead-letter-routing-key": FILA_DLQ})
     canal.queue_bind(queue=FILA, exchange=exchange_lexpubli, routing_key="contest.discovery.*")
     canal.basic_qos(prefetch_count=1)  # um concurso por vez: o buscador é lento
     ctx = ctx_fabrica(canal)
@@ -326,10 +331,6 @@ def escutar(ctx_fabrica: Callable[[object], Contexto], url: str,
             conexao.close()
 
 
-def _env_bool(nome: str) -> bool:
-    return os.environ.get(nome, "").strip().lower() in ("1", "true", "yes", "on")
-
-
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--arquivo", help="processa um evento JSON salvo (sem broker) e sai")
@@ -347,7 +348,7 @@ def main(argv=None) -> int:
 
     from . import buscador
     out_dir = os.environ.get("EVENTOS_OUT_DIR", "eventos_debug")
-    exchange_resposta = os.environ.get("RABBIT_EXCHANGE", "lexcorpus.events")
+    exchange_resposta = os.environ.get("LEXPUBLI_RESPOSTA_EXCHANGE", "lexcorpus.events")
 
     def fabrica(canal) -> Contexto:
         return Contexto(
@@ -363,12 +364,15 @@ def main(argv=None) -> int:
         envelope = json.loads(Path(args.arquivo).read_text(encoding="utf-8"))
         print(processar(envelope, fabrica(None)))
         return 0
-    if not _env_bool("RABBIT_ENABLED"):
-        print("RABBIT_ENABLED desligado: use --arquivo para processar um evento salvo.",
+    # O broker é o do LexPubli (LexPubli ADR-0005 §2a), nunca o do LexLearn:
+    # por isso não há fallback para RABBIT_URL.
+    url = os.environ.get("LEXPUBLI_RABBIT_URL", "")
+    if not url:
+        print("LEXPUBLI_RABBIT_URL vazia: use --arquivo para processar um evento salvo.",
               file=sys.stderr)
         return 2
-    escutar(fabrica, os.environ.get("RABBIT_URL", "amqp://guest:guest@localhost:5672/"),
-            os.environ.get("LEXPUBLI_EXCHANGE", "lexpubli.events"), exchange_resposta)
+    escutar(fabrica, url, os.environ.get("LEXPUBLI_EXCHANGE", "lexpubli.events"),
+            exchange_resposta)
     return 0
 
 

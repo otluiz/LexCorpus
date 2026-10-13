@@ -136,7 +136,8 @@ e Docker). O `.env.example` (raiz) é o template — copie para `.env` (não
 versionado) e ajuste por ambiente; credenciais de produção ficam só lá:
 
 - `LEXCORPUS_FILES_STORE` — onde os PDFs são gravados (ver seção Storage)
-- `RABBIT_ENABLED` / `RABBIT_URL` — publicação de eventos (produção)
+- `RABBIT_ENABLED` / `RABBIT_URL` — publicação de eventos v2.1 (broker do LexLearn)
+- `LEXPUBLI_RABBIT_URL` — broker do LexPubli: consumidor e respostas `document.*`
 - `EVENTOS_OUT_DIR` — pasta dos eventos em modo debug (`RABBIT_ENABLED=False`)
 - `LEXCORPUS_WATCHLIST` / `LEXCORPUS_STATE_FILE` — scheduler
 - `LEXCORPUS_STORAGE_DIR` — só compose (não é lida pelo settings.py):
@@ -226,7 +227,7 @@ quando a curadoria humana dele aprova um concurso. O **consumidor** recebe
 esse aviso e decide o que coletar, pela política versionada em
 `politica_coleta.yaml`: **o LexPubli avisa e o LexCorpus decide.**
 
-    python -m lexcorpus.consumidor                    # escuta a fila (RABBIT_ENABLED=true)
+    python -m lexcorpus.consumidor                    # escuta a fila (LEXPUBLI_RABBIT_URL)
     python -m lexcorpus.consumidor --arquivo ev.json  # processa um evento salvo (dev)
     python -m lexcorpus.consumidor --sem-buscador     # só o concurso anunciado
 
@@ -240,10 +241,16 @@ O que acontece com cada concurso aprovado:
   (confirmação no catálogo do órgão, score mínimo, no máximo 3 certames).
 - **O que a política não resolve** vira `document.acquisition.awaiting_operator`
   para o operador: banca sem spider, alvo não identificado, candidata fraca.
-- **Respostas** ao LexPubli no exchange `lexcorpus.events`:
-  `document.acquisition.completed` (sai do pipeline, ao publicar o concurso
-  para o LexLearn), `.awaiting_operator` e `.failed`. O LexLearn se liga com
-  `concurso.#` e **não** as recebe. O contrato v2.1 não muda.
+- **Respostas** ao LexPubli no exchange `lexcorpus.events` **do broker do
+  LexPubli**: `document.acquisition.completed` (sai do pipeline, ao publicar
+  o concurso para o LexLearn), `.awaiting_operator` e `.failed`. O contrato
+  v2.1 não muda.
+
+**Dois brokers (LexPubli ADR-0005 §2a).** A automação LexPubli ↔ LexCorpus é
+a única do ecossistema e passa pelo broker **do LexPubli**
+(`LEXPUBLI_RABBIT_URL`, host `lexpubli-rabbitmq`, usuário `lexcorpus` de
+permissão mínima). O broker do LexLearn (`RABBIT_URL`) fica só com o v2.1
+(`concurso.*`). O LexLearn não recebe nada do LexPubli.
 
 Arquivos e caminhos:
 
@@ -256,8 +263,13 @@ Arquivos e caminhos:
 
 No container (o consumidor **não** monta `/data`, porque não toca em PDF):
 
-    docker compose -f docker-compose.crawler.yml -f docker-compose.lexlearn.yml \
+    docker compose -f docker-compose.crawler.yml -f docker-compose.lexpubli.yml \
       --profile consumidor up -d consumidor
+
+O consumidor entra só na rede do broker do LexPubli, não na do LexLearn. Os
+crawls usam os dois overlays (`-f docker-compose.lexlearn.yml -f
+docker-compose.lexpubli.yml`): o v2.1 sai no broker do LexLearn e as
+respostas no do LexPubli.
 
 ## Catálogo dinâmico
 

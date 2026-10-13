@@ -70,13 +70,20 @@
          ganha a seção relacionados (mesma banca, máx. 5)
    - [ ] Consumir contest.discovery.updated (carreira/banca tardias)
    - [ ] Emitir relation=related só depois que o LexPubli aceitar
-** TODO [#A] Broker do LexPubli separado do v2.1 (LexPubli ADR-0005 §2a) :ALINHAR_LexPubli:
+** FEITO [#A] Broker do LexPubli separado do v2.1 (LexPubli ADR-0005 §2a) :ALINHAR_LexPubli:
    A automação LexPubli ↔ LexCorpus sai do broker do LexLearn. Hoje uma
-   RABBIT_URL só serve o v2.1, o consumidor e as respostas document.*.
-   - [ ] URL separada (ex.: LEXPUBLI_RABBIT_URL) para o consumidor e para
-         o Respondedor, inclusive o _responder_lexpubli do pipeline
-   - [ ] RABBIT_URL (LexLearn) fica só com concurso.*
-   - [ ] Testes e E2E com os dois brokers
+   RABBIT_URL servia o v2.1, o consumidor e as respostas document.*.
+   CLOSED: 2026-10-13
+   - [X] LEXPUBLI_RABBIT_URL para o consumidor e o Respondedor, inclusive o
+         _responder_lexpubli do pipeline (conexão própria, aberta só se há
+         resposta); sem fallback para RABBIT_URL
+   - [X] RABBIT_URL (LexLearn) fica só com concurso.*
+   - [X] Overlay docker-compose.lexpubli.yml (rede lexpubli-broker, host
+         lexpubli-rabbitmq); o consumidor NÃO entra na rede do LexLearn
+   - [X] DLX próprio (lexcorpus.lexpubli.dlx): o usuário lexcorpus não tem
+         escrita em amq.default
+   - [X] Testes (150) e E2E: aprovação no LexPubli → consumidor → resposta
+         validada, com correlation_id, no broker do LexPubli
 ** EM-ANDAMENTO [#A] ADR-0007: consumidor do LexPubli + política de coleta  :ALINHAR_LexPubli:
    ACEITO em 12/10, junto com o ADR-0002 do LexPubli (espelho). Revisa a
    regra "promoção sempre manual" do ADR-0006: o operador define a POLÍTICA

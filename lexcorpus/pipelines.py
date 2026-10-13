@@ -232,6 +232,10 @@ class EventoRabbitPipeline:
         self.routing_atualizado = settings.get(
             "RABBIT_ROUTING_ATUALIZADO", "concurso.atualizado")
         self.rabbit_url = settings.get("RABBIT_URL", "amqp://guest:guest@localhost:5672/")
+        # respostas ao LexPubli: broker DELE, conexão aberta só se houver resposta
+        self.lexpubli_url = settings.get("LEXPUBLI_RABBIT_URL", "")
+        self.lexpubli_exchange = settings.get("LEXPUBLI_RESPOSTA_EXCHANGE", "lexcorpus.events")
+        self._conn_lexpubli = None
         self.out_dir = settings.get("EVENTOS_OUT_DIR", "eventos_debug")
         self.state_db = settings.get("LEXCORPUS_STATE_DB", "state/lexcorpus_state.db")
         self.versao = versao_contrato(settings)
@@ -299,6 +303,8 @@ class EventoRabbitPipeline:
                 self._store.close()
             if self._conn is not None:
                 self._conn.close()
+            if self._conn_lexpubli is not None and self._conn_lexpubli.is_open:
+                self._conn_lexpubli.close()
 
     # -- diff contra o StateStore (§6.11) -------------------------------------
 
@@ -479,6 +485,17 @@ class EventoRabbitPipeline:
                                evento["concurso"], evento["event"])
         self._responder_lexpubli(evento, spider)
 
+    def _canal_lexpubli(self):
+        """Canal no broker do LexPubli (não no do LexLearn). None = dev:
+        o Respondedor grava as respostas em disco."""
+        if not self.lexpubli_url:
+            return None
+        if self._conn_lexpubli is None:
+            import pika
+            self._conn_lexpubli = pika.BlockingConnection(
+                pika.URLParameters(self.lexpubli_url))
+        return self._conn_lexpubli.channel()
+
     def _responder_lexpubli(self, evento, spider):
         """ADR-0007: se este concurso atende a concursos anunciados pelo
         LexPubli (aquisicao_lexpubli), responde document.acquisition.completed
@@ -499,9 +516,14 @@ class EventoRabbitPipeline:
         cargos = [c for a in evento["arquivos"] if a.get("vigente", True)
                   for c in a.get("cargos", [])]
         rotulo = ((evento.get("extra") or {}).get("rotulos") or {}).get("banca")
-        respondedor = Respondedor(
-            channel=self._channel if self.rabbit_enabled else None,
-            exchange=self.exchange, out_dir=self.out_dir)
+        try:
+            canal = self._canal_lexpubli()
+        except Exception:
+            spider.logger.exception("broker do LexPubli inacessível; respostas de %s/%s "
+                                    "não enviadas", banca, concurso)
+            return
+        respondedor = Respondedor(channel=canal, exchange=self.lexpubli_exchange,
+                                  out_dir=self.out_dir)
         for aq in aquisicoes:
             try:
                 respondedor.completed(
