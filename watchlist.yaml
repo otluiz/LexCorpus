@@ -81,7 +81,11 @@ alvos:
     params: {slug: sface125}
     settings: {ROBOTSTXT_OBEY: false}   # robots.txt da FCC bloqueia /concursos/ (BACKLOG)
     cron: "15 6,18 * * *"      # 2x/dia — ciclo aberto
-    ativo: true
+    # DESATIVADO em 13/10 (dono do produto): a coleta passa a rodar sozinha no
+    # gpu01, e a FCC pede no robots.txt que robôs não acessem /concursos/ nem
+    # PDFs. Volta só com autorização da FCC ou por fonte oficial alternativa
+    # (ex.: o gabarito republicado no DOE do Ceará).
+    ativo: false
 
   # --- CESGRANRIO — spider pronto (18/08, API pública do portal) -----------
   # Transpetro 2023 (PSP-RH-2023): portal próprio do cliente, mesma API. O

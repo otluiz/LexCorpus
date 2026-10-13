@@ -154,6 +154,9 @@
          v2.1, sem campo novo) + document.acquisition.completed (válido no
          contrato v1 do LexPubli, correlation_id = event_id da aprovação)
    - [ ] Revisar o ROBOTSTXT_OBEY=False da FCC (regra comum: respeitar
+         13/10: o alvo manual sface125 foi DESATIVADO (a coleta vai rodar
+         sozinha no gpu01). Caminhos: autorização da FCC; gabarito pela
+         republicação oficial do órgão (DOE-CE); ou coleta manual pontual.
          robots). Até lá a FCC fica FORA de bancas_validadas
    - [ ] Conferir o SPIDERS_POR_BANCA: fcc ainda usa params "codigo", mas o
          spider e o watchlist usam "slug"
