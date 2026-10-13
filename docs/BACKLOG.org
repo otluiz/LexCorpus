@@ -108,8 +108,20 @@
          novidade
    - [ ] Na revisão: PSS (temporários) e juiz cujo rótulo não diz "juiz"
          (ex.: tjmsjuiz25)
-   - [ ] Inventário sem ano (slugs como "tjba", "trf1"): ler o ano na
-         página do concurso, ou o operador informa
+   - [X] FGV sem ano no slug (13/10): página oficial + edital. Medido em
+         68 sugeridos: 53 com ano no slug, 10 pela página, 4 pelo edital
+         (tjba 2014, tjpi 2015, trf1 2024, trf6 2025), 1 sem ano (tjrj, que
+         nem tem provas). A página sozinha erra em concurso que atravessa
+         anos (trf6: 2026 = publicação; edital 2025). Pasta ganha o ano
+         (-a concurso=). Alerta de outra carreira pelos PDFs; "sem provas"
+         bloqueia a confirmação. --ano na revisão. PyMuPDF no requirements
+         (o mesmo leitor do LexLearn; licença AGPL)
+   - [ ] Alerta de juiz é ruidoso nas páginas de TJ da FGV (a FGV junta
+         documentos de juiz e de servidor): 25 de 68. Refinar se atrapalhar
+   - [ ] tjrjservidores25 (1ª leva, libera 09/11) está "sem provas" na
+         página hoje: o alvo roda e não traz nada até a FGV publicar
+   - [ ] trf6 é concurso de JUIZ (o edital diz); sai de tribunais quando
+         a carreira jurídica entrar na varredura
    - [X] inventariar: Cebraspe (13/10). Índice PCI /provas/cebraspe (32
          páginas, 1.600 provas, 149 concursos de 2017 a 2025; robots.txt
          permite /provas/) + confirmação na API por slug. Medido: 5 fiscais

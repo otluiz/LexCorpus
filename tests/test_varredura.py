@@ -318,3 +318,93 @@ def test_reescalonar_refaz_so_os_ainda_nao_liberados(rev):
     assert datas(r) == {"fgv:sefaz3": "2026-10-13", "fgv:sefaz2": "2026-10-19",   # já liberados
                         "fgv:sefaz1": "2026-10-20",     # a semana de 19/10 ainda tinha vaga
                         "fgv:sefaz0": "2026-10-26"}
+
+
+
+# --- FGV: ano, alerta e "sem provas" pela página oficial -----------------------
+
+def _pagina_fgv(pdfs, titulo="Concurso | FGV Conhecimento", corpo=""):
+    links = "".join(f'<a href="{u}">{t}</a>' for u, t in pdfs)
+    rodape = '<a href="/sites/default/files/2026.01.16-termos-de-uso.pdf">Termos</a>'
+    return f"<html><title>{titulo}</title><body>{corpo}{links}{rodape}</body></html>"
+
+
+@pytest.mark.parametrize("texto,ano", [
+    ("2015 2015 2015 2014", 2015),
+    ("2015 2015", None),                 # poucas menções
+    ("2015 2015 2015 2016 2016 2016", None),   # empate
+])
+def test_ano_mais_citado(texto, ano):
+    assert var.ano_mais_citado(texto) == ano
+
+
+@pytest.mark.parametrize("texto,ano", [
+    ("Publicado em: 18/09/2026 | EDITAL DE ABERTURA Nº 1, DE 22 DE AGOSTO DE 2025", 2025),
+    ("edital-de-abertura-no-1-de-22-de-agosto-de-2025-edital.pdf", 2025),
+    ("Edital nº 1/2015 - Abertura", 2015),
+    ("resultado_final_retificado_11.06.2019.pdf", None),
+])
+def test_ano_do_edital(texto, ano):
+    assert var.ano_do_edital(texto) == ano
+
+
+def test_analisar_pagina_fgv():
+    html = _pagina_fgv([("/sites/default/files/concursos/tjx_prova_tipo1.pdf", "Prova Objetiva 2015"),
+                        ("/sites/default/files/concursos/tjx_gabarito.pdf", "Gabarito Definitivo 2015"),
+                        ("/sites/default/files/concursos/tjx_resultado.pdf", "Resultado 2015")])
+    info = var.analisar_pagina_fgv(html)
+    assert info["pdfs"][0][0] == "https://conhecimento.fgv.br/sites/default/files/concursos/tjx_prova_tipo1.pdf"
+    assert len(info["pdfs"]) == 3                      # rodapé fora
+    assert info["n_provas"] == 2 and info["ano"] == 2015 and info["ano_pdfs"] == 2015
+
+
+def _entrada_fgv(slug, rotulo="Tribunal de Justiça do Estado X"):
+    [e] = var.inventario_fgv([{"slug": slug, "rotulo": rotulo, "url": "u"}], REGRAS, LIDO)
+    return e
+
+
+def test_enriquecer_ano_concordante_e_pasta_com_ano():
+    html = _pagina_fgv([("/sites/default/files/concursos/p.pdf", "Prova Objetiva 2015")],
+                       corpo="2015 2015")
+    [e] = var.enriquecer_fgv([_entrada_fgv("tjx")], REGRAS, http_html=lambda u: html, pausa=0)
+    assert (e["ano"], e["ano_origem"], e["concurso"]) == (2015, "pagina", "tjx_2015")
+    assert e["params"] == {"slug": "tjx", "concurso": "tjx_2015"}
+
+
+def test_enriquecer_divergencia_resolve_pelo_edital():
+    """Concurso que atravessa anos: a página puxa para 2026; o edital diz 2025."""
+    html = _pagina_fgv([("/sites/default/files/concursos/edital-de-abertura-no-1-de-22-de-agosto-de-2025.pdf",
+                         "Edital de abertura"),
+                        ("/sites/default/files/concursos/prova-2025.pdf", "Prova Objetiva 2025 2025")],
+                       corpo="publicado em 01/10/2026 2026 2026 2026 2026")
+    [e] = var.enriquecer_fgv([_entrada_fgv("trfx")], REGRAS, http_html=lambda u: html, pausa=0,
+                             ler_pdf=lambda u: pytest.fail("não precisava baixar"))
+    assert (e["ano"], e["ano_origem"]) == (2025, "edital")
+
+
+def test_enriquecer_ultima_instancia_le_o_pdf():
+    html = _pagina_fgv([("/sites/default/files/concursos/resultado_2019.pdf", "Resultado 2019 2019 2019")],
+                       corpo="2015 2015 2015 2015 2015")
+    lidos = []
+    [e] = var.enriquecer_fgv([_entrada_fgv("tjy")], REGRAS, http_html=lambda u: html, pausa=0,
+                             ler_pdf=lambda u: lidos.append(u) or 2014)
+    assert (e["ano"], e["ano_origem"]) == (2014, "edital") and len(lidos) == 1
+    [e] = var.enriquecer_fgv([_entrada_fgv("tjz")], REGRAS, http_html=lambda u: html, pausa=0,
+                             ler_pdf=lambda u: None)
+    assert (e["ano"], e["ano_origem"]) == (2015, "pagina_conferir")
+
+
+def test_enriquecer_alerta_e_sem_provas():
+    juiz = _pagina_fgv([("/sites/default/files/concursos/tjx-juiz-substituto-prova.pdf", "Prova Objetiva")])
+    [e] = var.enriquecer_fgv([_entrada_fgv("tjx25")], REGRAS, http_html=lambda u: juiz, pausa=0)
+    assert "juiz" in e["alerta"]
+    vazio = _pagina_fgv([("/sites/default/files/concursos/convocacao.pdf", "Convocação")])
+    [e] = var.enriquecer_fgv([_entrada_fgv("tjw25")], REGRAS, http_html=lambda u: vazio, pausa=0)
+    assert e["sem_provas"] is True
+
+
+def test_confirmar_recusa_sem_provas(rev):
+    e = fiscais(1)[0]
+    e["sem_provas"] = True
+    with pytest.raises(ValueError, match="sem prova"):
+        rev().confirmar([e], "fiscal")

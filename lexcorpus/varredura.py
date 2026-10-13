@@ -164,6 +164,155 @@ def inventario_cesgranrio(corpo: dict, regras: dict, lido_em: str) -> list[dict]
     return saida
 
 
+# --- FGV: a página oficial completa o que a listagem não diz -----------------
+
+FGV_CONCURSO = "https://conhecimento.fgv.br/concursos/{slug}"
+_RE_PDF_LINK = re.compile(r'<a[^>]+href="([^"]+\.pdf)"[^>]*>(.*?)</a>', re.I | re.S)
+_RE_ANO_TEXTO = re.compile(r"\b(20[0-3]\d)\b")
+ANO_MIN_MENCOES = 3
+
+
+def ano_mais_citado(texto: str) -> int | None:
+    """O ano que domina o texto: no mínimo ANO_MIN_MENCOES menções e mais que
+    o segundo colocado. Empate ou poucas menções: None (não chutar)."""
+    contagem: dict[int, int] = {}
+    for a in _RE_ANO_TEXTO.findall(texto):
+        contagem[int(a)] = contagem.get(int(a), 0) + 1
+    ordem = sorted(contagem.items(), key=lambda kv: -kv[1])
+    if not ordem or ordem[0][1] < ANO_MIN_MENCOES:
+        return None
+    if len(ordem) > 1 and ordem[1][1] == ordem[0][1]:
+        return None
+    return ordem[0][0]
+
+
+def analisar_pagina_fgv(html: str) -> dict:
+    """O que a página oficial diz: os PDFs (url, texto), quantos são prova
+    ou gabarito, o título e o ano dominante."""
+    from .heuristics import classificar_papel
+
+    from urllib.parse import urljoin
+
+    pdfs = [(urljoin(FGV_CONCURSO.format(slug=""), u), _RE_TAG.sub(" ", t).strip())
+            for u, t in _RE_PDF_LINK.findall(html)]
+    pdfs = [(u, t) for u, t in pdfs if "/concursos/" in u.lower()]     # rodapé fora
+    titulo = re.search(r"<title>(.*?)</title>", html, re.S)
+    texto = _RE_TAG.sub(" ", html)
+    nomes = " ".join(u.rsplit("/", 1)[-1] + " " + t for u, t in pdfs)
+    return {
+        "titulo": (titulo.group(1).split("|")[0].strip() if titulo else ""),
+        "pdfs": pdfs,
+        "n_provas": sum(1 for u, t in pdfs if classificar_papel(t, u)),
+        # dois sinais: a página (datas de publicação: em concurso que atravessa
+        # anos, puxa para o mais recente) e os nomes dos PDFs
+        "ano": ano_mais_citado(texto),
+        "ano_pdfs": ano_mais_citado(nomes),
+    }
+
+
+def enriquecer_fgv(entradas: list[dict], regras: dict, *, http_html, pausa: float = PCI_PAUSA_S,
+                   ler_pdf=None) -> list[dict]:
+    """Para os sugeridos: abre a página oficial do concurso.
+
+    - ano: quando a página e os nomes dos PDFs concordam, esse. Quando
+      divergem (concurso que atravessa anos: a página puxa para a publicação
+      mais recente) ou faltam, ÚLTIMA instância: o "Edital nº X/AAAA" da 1ª
+      página do edital de abertura. Sem PDF legível, o da página, a conferir.
+    - nome: slug sem ano ganha o ano (tjba -> tjba_2015), como as outras
+      pastas do acervo (cnu_2025, sefaz_ce_21); o spider recebe -a concurso=.
+    - alerta: termo de exceção da carreira nos PDFs (ex.: "juiz" num TJ cujo
+      rótulo não diz): o operador decide.
+    - sem_provas: nenhum PDF de prova ou gabarito na página.
+    """
+    import time
+
+    for e in entradas:
+        if not e["carreira_sugerida"]:
+            continue
+        html = http_html(FGV_CONCURSO.format(slug=e["slug"]))
+        if pausa:
+            time.sleep(pausa)
+        if not html:
+            e["alerta"] = "página oficial não respondeu"
+            continue
+        info = analisar_pagina_fgv(html)
+        e["n_provas"] = info["n_provas"]
+        e["sem_provas"] = info["n_provas"] == 0
+        nomes = " ".join(u.rsplit("/", 1)[-1] + " " + t for u, t in info["pdfs"])
+        if sugerir_carreira(f"{e['rotulo']} {info['titulo']} {nomes}", regras) != e["carreira_sugerida"]:
+            exc = [t.strip() for t in regras[e["carreira_sugerida"]]["exceto"] if t in _normalizar(nomes)]
+            e["alerta"] = f"nos PDFs: {', '.join(exc) or 'outra carreira'}"
+        if not e["ano"]:
+            ano_p, ano_n = info["ano"], info["ano_pdfs"]
+            ano, origem = ano_p, "pagina"
+            if ano_p is None or (ano_n is not None and ano_n != ano_p):
+                lido = None
+                if info["pdfs"]:
+                    url = _pdf_para_ano(info["pdfs"])
+                    texto_link = next(t for u, t in info["pdfs"] if u == url)
+                    # o nome do edital de abertura costuma trazer o ano: sem download
+                    lido = ano_do_edital(f"{url.rsplit('/', 1)[-1]} {texto_link}")
+                    if lido is None and ler_pdf:
+                        lido = ler_pdf(url)
+                if lido:
+                    ano, origem = lido, "edital"
+                else:
+                    ano, origem = ano_p or ano_n, "pagina_conferir"
+            if ano:
+                e.update(ano=ano, ano_origem=origem,
+                         concurso=f"{slugify(e['slug'])}_{ano}",
+                         params={**e["params"], "concurso": f"{slugify(e['slug'])}_{ano}"})
+    return entradas
+
+
+_RE_ANO_EDITAL = re.compile(r"edital[^|]{0,80}?\b(20[0-3]\d)\b", re.I)
+
+
+def ano_do_edital(texto: str) -> int | None:
+    """O ano que vem logo depois de "EDITAL": "EDITAL DE ABERTURA Nº 1, DE 22
+    DE AGOSTO DE 2025", "Edital nº 1/2015", ou o nome do arquivo
+    "edital-de-abertura-no-1-de-22-de-agosto-de-2025". Não confunde com a
+    data de publicação do DOU, que vem antes."""
+    m = _RE_ANO_EDITAL.search(re.sub(r"[\s_-]+", " ", texto))
+    return int(m.group(1)) if m else None
+
+
+def _pdf_para_ano(pdfs: list[tuple[str, str]]) -> str:
+    """O PDF que melhor data o concurso: o edital de abertura; senão uma
+    prova ou gabarito; senão o primeiro."""
+    for padrao in (r"edital.*(abertura|n[ºo°]?\s*0*1\b)|abertura", r"prova|caderno|gabarito"):
+        for u, t in pdfs:
+            if re.search(padrao, f"{t} {u}", re.I):
+                return u
+    return pdfs[0][0]
+
+
+def ano_do_pdf(url: str, *, max_bytes: int = 15_000_000) -> int | None:
+    """ÚLTIMA instância: baixa UM PDF oficial (em memória; nada é gravado) e
+    lê o ano da 1ª página. Mesmo leitor do LexLearn (PyMuPDF, page.get_text()),
+    reproduzido aqui: os projetos não importam o código um do outro."""
+    try:
+        import pymupdf  # PyMuPDF (o LexLearn usa o nome antigo, fitz)
+        import requests
+    except ImportError:
+        log.warning("PyMuPDF ausente: sem a última instância (ano pelo PDF)")
+        return None
+    resp = requests.get(url, timeout=60, stream=True, headers={
+        "User-Agent": "LexCorpus/1.0 (+coletor de provas; fonte oficial)"})
+    if resp.status_code != 200:
+        return None
+    dados = resp.raw.read(max_bytes + 1, decode_content=True)
+    if len(dados) > max_bytes:
+        return None
+    try:
+        with pymupdf.open(stream=dados, filetype="pdf") as doc:
+            texto = doc[0].get_text() if len(doc) else ""
+    except Exception as exc:                     # PDF corrompido ou cifrado
+        log.warning("PDF ilegível (%s): %s", url, exc)
+        return None
+    return ano_do_edital(texto) or ano_mais_citado(texto)
+
+
 def ler_pci(html: str) -> list[dict]:
     """Linhas da tabela de provas do PCI: cargo, ano, órgão (rótulo e slug)."""
     linhas = []
@@ -241,7 +390,9 @@ def inventariar(banca: str, *, regras: dict, destino_dir: Path = INVENTARIO_DIR,
                                     "`scrapy crawl fgv -a descoberta=1`")
         linhas = [json.loads(l) for l in Path(fgv_jsonl).read_text(encoding="utf-8").splitlines()
                   if l.strip()]
-        entradas = inventario_fgv(linhas, regras, lido_em)
+        entradas = enriquecer_fgv(inventario_fgv(linhas, regras, lido_em), regras,
+                                  http_html=http_html or _http_html_padrao, pausa=pausa,
+                                  ler_pdf=ano_do_pdf if pausa else None)
     elif banca == "cesgranrio":
         status, corpo = http_get(CESGRANRIO_EVENTOS)
         if status != 200 or not isinstance(corpo, dict):
@@ -333,6 +484,9 @@ class Revisao:
         sem_ano = [e["chave"] for e in entradas if not e["ano"]]
         if sem_ano:
             raise ValueError(f"sem ano no inventário: {sem_ano}")
+        sem_provas = [e["chave"] for e in entradas if e.get("sem_provas")]
+        if sem_provas:
+            raise ValueError(f"sem prova nem gabarito na página oficial: {sem_provas}")
         sem_alvo = [e["chave"] for e in entradas if not e.get("params")]
         if sem_alvo:
             raise ValueError(f"sem slug confirmado na API: {sem_alvo} (use --slug chave=SLUG)")
@@ -432,6 +586,8 @@ def main(argv=None) -> int:
     pr.add_argument("--confirmar", help="chaves separadas por vírgula (ex.: fgv:sefazes22)")
     pr.add_argument("--descartar", help="chaves separadas por vírgula")
     pr.add_argument("--motivo", default="")
+    pr.add_argument("--ano", help="chave=AAAA,... para corrigir ou informar o ano "
+                                  "(o nome da pasta ganha o ano: tjba -> tjba_2015)")
     pr.add_argument("--slug", help="Cebraspe: chave=SLUG,... quando a sonda não achou; "
                                    "o slug é conferido na API oficial antes de valer")
     pa = sub.add_parser("agenda", help="mostra (e completa) a liberação semanal dos confirmados")
@@ -471,6 +627,17 @@ def main(argv=None) -> int:
     inventario = carregar_inventario(inventario_dir)
     por_chave = {e["chave"]: e for e in inventario}
     try:
+        for par in (args.ano or "").split(","):
+            if not par.strip():
+                continue
+            chave, _, ano = par.partition("=")
+            e = por_chave.get(chave.strip())
+            if e is None or not ano.strip().isdigit() or not 2000 <= int(ano) <= 2100:
+                raise ValueError(f"--ano inválido: {par!r}")
+            e.update(ano=int(ano), ano_origem="operador")
+            if e["banca"] == "fgv" and not _ano_do_slug(e["slug"]):
+                nome = f"{slugify(e['slug'])}_{int(ano)}"
+                e.update(concurso=nome, params={**e["params"], "concurso": nome})
         for par in (args.slug or "").split(","):
             if not par.strip():
                 continue
@@ -503,7 +670,18 @@ def main(argv=None) -> int:
     for banca in sorted({e["banca"] for e in pend}):
         print(f"  [{banca}] vagas no teto: {rev.vagas(args.carreira, banca)}")
     for e in pend:
-        print(f"  {e['chave']:<28} {e['ano'] or '----'}  {e['organ'][:60]}")
+        marcas = []
+        if e.get("ano_origem") in ("pagina", "edital", "pagina_conferir"):
+            marcas.append({"pagina": "ano pela página", "edital": "ano pelo edital",
+                           "pagina_conferir": "ano pela página: CONFERIR"}[e["ano_origem"]])
+        if e.get("sem_provas"):
+            marcas.append("SEM PROVAS")
+        if e.get("alerta"):
+            marcas.append(f"ALERTA {e['alerta']}")
+        if e["banca"] == "cebraspe" and not e.get("params"):
+            marcas.append("SEM SLUG (--slug)")
+        print(f"  {e['chave']:<28} {e['ano'] or '----'}  {e['organ'][:50]}"
+              + (f"  [{'; '.join(marcas)}]" if marcas else ""))
     return 0
 
 

@@ -312,6 +312,15 @@ eixo da busca; a coleta continua nos spiders de banca.
   antes. Sem isso, um alvo novo é coletado na primeira passada, e o lote
   inteiro entraria no LexLearn de uma vez. `python -m lexcorpus.varredura
   agenda` mostra a escala.
+- **FGV:** para os sugeridos, a página oficial do concurso completa a
+  listagem: o **ano** (quando a página e os nomes dos PDFs concordam; se
+  divergem, o ano do **edital de abertura**, pelo nome do arquivo ou, em
+  última instância, pela 1ª página do PDF, lida em memória com o PyMuPDF,
+  o mesmo leitor do LexLearn), o **nome da pasta com o ano** (`tjba` ->
+  `tjba_2014`, via `-a concurso=`), um **alerta** quando os PDFs indicam
+  outra carreira (ex.: juiz num TJ) e **sem provas** quando a página não
+  tem prova nem gabarito (não pode ser confirmado). `--ano chave=AAAA`
+  corrige o ano na revisão.
 - **Cebraspe:** a API não lista eventos. `inventariar --banca cebraspe` lê a
   listagem `/provas/cebraspe` do PCI **só como índice** (cargo, ano, órgão;
   nunca PDF), agrupa por órgão e ano e, para os concursos com carreira
