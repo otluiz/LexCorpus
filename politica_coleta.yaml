@@ -44,3 +44,14 @@ anteriores:
 relacionados:
   ativo: true
   max_por_alvo: 5                       # related por concurso anunciado, mais recentes primeiro
+
+# VARREDURA por carreira (ADR-0009): o acervo cresce antes do anúncio. A
+# carreira é o eixo da busca; a coleta é dos spiders de banca. A regra só
+# sugere (carreiras_regras.yaml); o operador confirma em lote:
+#   python -m lexcorpus.varredura revisar --carreira fiscal
+# O teto protege o LexLearn: tudo o que é coletado entra lá pelo v2.1.
+varredura:
+  ativo: true
+  carreiras: [fiscal, tribunais]
+  max_por_carreira_e_banca: 5           # os mais recentes primeiro
+  cron: "45 5 * * 2"                    # 1x/semana: o ritmo de entrada no LexLearn

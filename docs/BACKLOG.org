@@ -64,13 +64,25 @@
    tribunais, até 5 concursos por carreira e banca. A carreira é o eixo da
    BUSCA; a coleta continua nos spiders de banca.
    - [X] Aceite do ADR (13/10)
-   - [ ] carreiras_regras.yaml + sugestão (nunca grava sozinha)
-   - [ ] inventariar: FGV e Cesgranrio (listagens oficiais)
+   - [X] carreiras_regras.yaml + sugestão (nunca grava sozinha); exceções:
+         Tribunal de Contas (controle), juiz/magistratura (jurídica),
+         notarial/registral, auditor fiscal do trabalho
+   - [X] inventariar: FGV e Cesgranrio (listagens oficiais). Medido em
+         13/10: FGV 339 concursos (listagem de 19/08; rodar de novo
+         `scrapy crawl fgv -a descoberta=1`), 10 fiscais e 58 tribunais
+         sugeridos; Cesgranrio: o PortalEventos tem só 15 eventos, de 2023
+         em diante, nenhum fiscal ou de tribunais
+   - [X] revisar em lote (teto por carreira e banca; lote recusado
+         inteiro se passar do teto ou faltar o ano) + descartados
+   - [X] política varredura + watchlist.varredura.yaml + scheduler (o
+         manual é soberano); Dockerfile: LEXCORPUS_WATCHLIST_VARREDURA
+   - [ ] PRIMEIRA LEVA (operador): até 5 fiscais e 5 de tribunais da FGV.
+         Atenção na revisão: processos seletivos simplificados (PSS) e
+         concursos de juiz cujo rótulo não diz "juiz" (ex.: tjmsjuiz25)
+   - [ ] Inventário sem ano (slugs como "tjba", "trf1"): ler o ano na
+         página do concurso, ou o operador informa
    - [ ] inventariar: Cebraspe (índice PCI + confirmação na API por slug;
          a API não lista eventos e o sitemap não tem concursos)
-   - [ ] revisar em lote + descartados
-   - [ ] política varredura + watchlist.varredura.yaml + scheduler
-   - [ ] Medir a profundidade do histórico do PortalEventos (Cesgranrio)
 ** FEITO [#A] ADR-0008: relação related (concurso-alvo)            :ALINHAR_LexPubli:
    ACEITO em 13/10, espelho do ADR-0004 do LexPubli. Mesma banca + mesma
    carreira, em outros órgãos; acervo primeiro (completed na hora).

@@ -52,7 +52,8 @@ ENV LEXCORPUS_FILES_STORE=/data/raw/exams
 # volume em /state para o estado sobreviver entre crawls efêmeros
 ENV LEXCORPUS_STATE_DB=/state/lexcorpus_state.db \
     LEXCORPUS_STATE_FILE=/state/scheduler_state.json \
-    LEXCORPUS_WATCHLIST_AUTO=/state/watchlist.auto.yaml
+    LEXCORPUS_WATCHLIST_AUTO=/state/watchlist.auto.yaml \
+    LEXCORPUS_WATCHLIST_VARREDURA=/state/watchlist.varredura.yaml
 VOLUME /state
 
 # ENTRYPOINT = scrapy: o "comando" do container é o restante da linha scrapy

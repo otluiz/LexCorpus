@@ -289,6 +289,27 @@ crawls usam os dois overlays (`-f docker-compose.lexlearn.yml -f
 docker-compose.lexpubli.yml`): o v2.1 sai no broker do LexLearn e as
 respostas no do LexPubli.
 
+## Varredura por carreira (ADR-0009)
+
+O acervo cresce **antes** de o LexPubli anunciar um concurso. A carreira é o
+eixo da busca; a coleta continua nos spiders de banca.
+
+    scrapy crawl fgv -a descoberta=1                       # listagem oficial da FGV
+    python -m lexcorpus.varredura inventariar --banca fgv  # e --banca cesgranrio
+    python -m lexcorpus.varredura revisar --carreira fiscal
+    python -m lexcorpus.varredura revisar --carreira fiscal --confirmar fgv:sefazmt23,fgv:rfb22
+    python -m lexcorpus.varredura revisar --carreira tribunais --descartar fgv:psstjgo2025 \
+        --motivo "processo seletivo simplificado"
+
+- `carreiras_regras.yaml` (versionado) só **sugere** a carreira; o operador
+  confirma em lote. Carreiras ativas e teto em `politica_coleta.yaml`
+  (`varredura`): fiscal e tribunais, até 5 por banca, coleta semanal.
+- O confirmado entra no catálogo (com a carreira) e no
+  `watchlist.varredura.yaml` (gerado), que o scheduler lê junto com o manual
+  e o automático; o manual é soberano.
+- Cebraspe: a API não lista eventos; o inventário dela (índice PCI +
+  confirmação na API) ainda não existe.
+
 ## Catálogo dinâmico
 
 `catalogo.yaml` mantém as listas **vigentes** (certames no ar, status

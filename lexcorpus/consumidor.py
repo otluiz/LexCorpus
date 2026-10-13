@@ -96,6 +96,11 @@ def carregar_politica(path: str | Path = POLITICA_PADRAO) -> dict:
     rel = dados.setdefault("relacionados", {})
     rel.setdefault("ativo", False)
     rel.setdefault("max_por_alvo", 5)
+    var = dados.setdefault("varredura", {})       # ADR-0009 (lexcorpus.varredura)
+    var.setdefault("ativo", False)
+    var.setdefault("carreiras", [])
+    var.setdefault("max_por_carreira_e_banca", 5)
+    var.setdefault("cron", "45 5 * * 2")
     return dados
 
 
