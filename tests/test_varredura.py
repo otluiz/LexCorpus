@@ -12,6 +12,7 @@ from lexcorpus import scheduler as sch
 from lexcorpus import varredura as var
 from lexcorpus.catalogo import Catalogo
 from lexcorpus.consumidor import carregar_politica
+from lexcorpus.util import slugify
 
 REGRAS = var.carregar_regras()
 LIDO = "2026-10-13T12:00:00Z"
@@ -95,9 +96,107 @@ def test_inventariar_grava_jsonl(tmp_path):
     assert destino.name == "cesgranrio.jsonl"
 
 
-def test_cebraspe_ainda_nao_tem_inventario(tmp_path):
+def test_banca_sem_inventario(tmp_path):
     with pytest.raises(ValueError, match="ADR-0009"):
-        var.inventariar("cebraspe", regras=REGRAS, destino_dir=tmp_path)
+        var.inventariar("fcc", regras=REGRAS, destino_dir=tmp_path)
+
+
+# --- Cebraspe: índice PCI + confirmação na API oficial ---------------------------
+
+def _linha_pci(cargo, ano, orgao, orgao_slug):
+    url = f"https://www.pciconcursos.com.br/provas/download/{slugify(cargo)}-{orgao_slug}-cebraspe-{ano}"
+    return (f'<tr class="lk_link c" data-url="{url}"> <td class="ca"><a href="{url}" '
+            f'class="prova_download"><i class="fas fa-briefcase"></i>{cargo}</a></td> '
+            f'<td class="cb">{ano}</td> <td class="cc"><a href="https://www.pciconcursos.com.br'
+            f'/provas/{orgao_slug}" title="x">{orgao}</a></td> <td class="cd"><a href='
+            f'"https://www.pciconcursos.com.br/provas/cebraspe">CEBRASPE</a></td> </tr>')
+
+
+PAGINA1 = "<table>" + "".join([
+    _linha_pci("Auditor Fiscal da Receita Estadual", 2020, "SEFAZ/AL", "sefaz-al"),
+    _linha_pci("Analista Judiciário - Judiciária", 2024, "STJ", "stj"),
+    _linha_pci("Técnico Judiciário - Área Administrativa", 2024, "STJ", "stj"),
+]) + "</table>"
+PAGINA2 = "<table>" + "".join([
+    _linha_pci("Auditor Fiscal de Tributos Municipais", 2024, "Pref. Cachoeiro de Itapemirim/ES",
+               "prefeitura-cachoeiro-de-itapemirim-es"),
+    _linha_pci("Agente Administrativo", 2024, "Pref. Cachoeiro de Itapemirim/ES",
+               "prefeitura-cachoeiro-de-itapemirim-es"),
+    _linha_pci("Arquiteto", 2024, "Pref. Cachoeiro de Itapemirim/ES",
+               "prefeitura-cachoeiro-de-itapemirim-es"),
+    _linha_pci("Administrador", 2022, "Petrobras", "petrobras"),
+]) + "</table>"
+
+
+def api_fake(conhecidos):
+    chamadas = []
+
+    def get(url):
+        slug = url.rsplit("/", 1)[-1]
+        chamadas.append(slug)
+        if slug in conhecidos:
+            return 200, {"eventoURL": slug.upper()}
+        return 400, {"errors": {}}
+    get.chamadas = chamadas
+    return get
+
+
+def test_ler_pci():
+    [l, *_] = var.ler_pci(PAGINA1)
+    assert (l["cargo"], l["ano"], l["orgao"], l["orgao_slug"]) == \
+        ("Auditor Fiscal da Receita Estadual", 2020, "SEFAZ/AL", "sefaz-al")
+
+
+def test_sugestao_por_cargos_corta_a_prefeitura():
+    assert var.sugerir_por_cargos("Pref. Cachoeiro/ES", ["Auditor Fiscal", "Arquiteto",
+                                                         "Agente Administrativo"], REGRAS) is None
+    assert var.sugerir_por_cargos("Pref. Mossoró/RN", ["Auditor Fiscal de Tributos Municipais",
+                                                       "Auditor Fiscal - Direito"], REGRAS) == "fiscal"
+    assert var.sugerir_por_cargos("SEFAZ/AL", ["Analista"], REGRAS) == "fiscal"   # o órgão basta
+
+
+@pytest.mark.parametrize("orgao,ano,esperado", [
+    ("SEFAZ/AL", 2020, "sefaz_al_19"),          # ano da prova -> ano do edital também
+    ("TRF 6ª", 2025, "trf6_25"),
+    ("TRT da 8º Região", 2022, "trt8_22"),
+    ("Pref. Mossoró/RN", 2024, "pref_mossoro_rn_24"),
+    ("CNJ", 2025, "cnj_24"),
+])
+def test_candidatos_de_slug(orgao, ano, esperado):
+    assert esperado in var.candidatos_slug(orgao, ano)
+
+
+def test_inventario_cebraspe_confirma_na_api_so_o_que_tem_carreira():
+    api = api_fake({"stj_24"})
+    e = {x["orgao"] if "orgao" in x else x["organ"]: x for x in
+         var.inventario_cebraspe(var.ler_pci(PAGINA1 + PAGINA2), REGRAS, LIDO, http_get=api, pausa=0)}
+    assert e["STJ"]["params"] == {"slug": "stj_24"} and e["STJ"]["carreira_sugerida"] == "tribunais"
+    assert e["STJ"]["ano"] == 2024 and e["STJ"]["slug_confirmado"]
+    assert e["SEFAZ/AL"]["carreira_sugerida"] == "fiscal" and e["SEFAZ/AL"]["params"] is None
+    assert e["Pref. Cachoeiro de Itapemirim/ES"]["carreira_sugerida"] is None
+    assert not any(c.startswith(("petrobras", "pref_cach")) for c in api.chamadas)   # sem carreira: sem sonda
+
+
+def test_inventariar_cebraspe_pagina_ate_acabar(tmp_path):
+    paginas = {1: PAGINA1, 2: PAGINA2, 3: PAGINA2}           # o PCI repete a última
+    lidas = []
+
+    def html(url):
+        n = int(url.rstrip("/").rsplit("/", 1)[-1])
+        lidas.append(n)
+        return paginas.get(n, "")
+    var.inventariar("cebraspe", regras=REGRAS, destino_dir=tmp_path,
+                    http_get=api_fake({"stj_24"}), http_html=html, pausa=0)
+    assert lidas == [1, 2, 3]
+    chaves = {e["chave"] for e in var.carregar_inventario(tmp_path)}
+    assert "cebraspe:pci/stj-2024" in chaves and len(chaves) == 4
+
+
+def test_confirmar_exige_slug_confirmado(rev):
+    e = var.inventario_cebraspe(var.ler_pci(PAGINA1), REGRAS, LIDO, http_get=api_fake(set()), pausa=0)
+    sefaz = next(x for x in e if x["organ"] == "SEFAZ/AL")
+    with pytest.raises(ValueError, match="--slug"):
+        rev().confirmar([sefaz], "fiscal")
 
 
 # --- revisão --------------------------------------------------------------------

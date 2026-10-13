@@ -312,8 +312,15 @@ eixo da busca; a coleta continua nos spiders de banca.
   antes. Sem isso, um alvo novo é coletado na primeira passada, e o lote
   inteiro entraria no LexLearn de uma vez. `python -m lexcorpus.varredura
   agenda` mostra a escala.
-- Cebraspe: a API não lista eventos; o inventário dela (índice PCI +
-  confirmação na API) ainda não existe.
+- **Cebraspe:** a API não lista eventos. `inventariar --banca cebraspe` lê a
+  listagem `/provas/cebraspe` do PCI **só como índice** (cargo, ano, órgão;
+  nunca PDF), agrupa por órgão e ano e, para os concursos com carreira
+  sugerida, sonda a API oficial pelo slug (`{sigla}_{aa}`, com o ano da prova
+  e o anterior). Slug com sufixo (ex.: `sefaz_al_19_auditor`) não se
+  adivinha: o operador informa na revisão, e a API confere antes de valer:
+
+      python -m lexcorpus.varredura revisar --carreira fiscal \
+          --slug cebraspe:pci/sefaz-rj-2025=SEFAZ_RJ_25_AUDITOR --confirmar cebraspe:pci/sefaz-rj-2025
 
 ## Catálogo dinâmico
 

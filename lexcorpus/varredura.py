@@ -35,7 +35,7 @@ from pathlib import Path
 
 import yaml
 
-from .alvos import CESGRANRIO_EVENTOS, INVENTARIO_FGV, HttpGet, http_get_padrao
+from .alvos import CEBRASPE_API, CESGRANRIO_EVENTOS, INVENTARIO_FGV, HttpGet, http_get_padrao
 from .catalogo import CATALOGO_PATH, Catalogo
 from .consumidor import POLITICA_PADRAO, carregar_politica
 from .contratos_lexpubli import carreiras
@@ -48,6 +48,15 @@ REGRAS_PADRAO = RAIZ / "carreiras_regras.yaml"
 INVENTARIO_DIR = Path("state/inventario")
 DECISOES_PADRAO = Path("state/varredura.yaml")
 WATCHLIST_VARREDURA_PADRAO = Path("state/watchlist.varredura.yaml")
+
+# Cebraspe: a API não lista eventos. O índice é a listagem do PCI por banca
+# (só leitura de /provas/, permitido no robots.txt; nunca PDF), e cada
+# concurso só vira alvo depois de CONFIRMADO na API oficial por slug.
+PCI_LISTAGEM = "https://www.pciconcursos.com.br/provas/{banca}/{pagina}"
+PCI_PAUSA_S = 1.5
+_RE_PCI_LINHA = re.compile(r'<tr class="lk_link[^"]*" data-url="([^"]+)">(.*?)</tr>', re.S)
+_RE_PCI_TD = re.compile(r"<td[^>]*>(.*?)</td>", re.S)
+_RE_TAG = re.compile(r"<[^>]+>")
 
 _RE_PREFIXO_FGV = re.compile(
     r"^concurso\s+p[uú]blico\s+(?:para\s+)?(?:(?:a|o|as|os|da|do|de)\s+)?", re.I)
@@ -73,6 +82,24 @@ def carregar_regras(path: str | Path = REGRAS_PADRAO) -> dict[str, dict]:
     return {c: {"termos": [_normalizar(t) for t in r.get("termos", [])],
                 "exceto": [_normalizar(t) for t in r.get("exceto", [])]}
             for c, r in regras.items()}
+
+
+def sugerir_por_cargos(orgao: str, cargos: list[str], regras: dict[str, dict]) -> str | None:
+    """Para um concurso com vários cargos: vale o ÓRGÃO; se ele não diz a
+    carreira, vale a MAIORIA dos cargos. Um "Auditor Fiscal" entre dezenas
+    de cargos de prefeitura não faz do concurso um concurso fiscal."""
+    pelo_orgao = sugerir_carreira(orgao, regras)
+    if pelo_orgao:
+        return pelo_orgao
+    votos: dict[str, int] = {}
+    for c in cargos:
+        s = sugerir_carreira(c, regras)
+        if s:
+            votos[s] = votos.get(s, 0) + 1
+    if len(votos) != 1:
+        return None
+    (carreira, n), = votos.items()
+    return carreira if n * 2 > len(cargos) else None
 
 
 def sugerir_carreira(texto: str, regras: dict[str, dict]) -> str | None:
@@ -137,9 +164,76 @@ def inventario_cesgranrio(corpo: dict, regras: dict, lido_em: str) -> list[dict]
     return saida
 
 
+def ler_pci(html: str) -> list[dict]:
+    """Linhas da tabela de provas do PCI: cargo, ano, órgão (rótulo e slug)."""
+    linhas = []
+    for url, linha in _RE_PCI_LINHA.findall(html):
+        tds = [_RE_TAG.sub("", td).strip() for td in _RE_PCI_TD.findall(linha)]
+        if len(tds) < 3 or not tds[1].isdigit():
+            continue
+        m = re.search(r'class="[a-z]c"><a href="https://www\.pciconcursos\.com\.br/provas/([^"]+)"', linha)
+        linhas.append({"cargo": tds[0], "ano": int(tds[1]), "orgao": tds[2],
+                       "orgao_slug": m.group(1) if m else slugify(tds[2]).replace("_", "-"),
+                       "url": url})
+    return linhas
+
+
+def candidatos_slug(orgao: str, ano: int) -> list[str]:
+    """Slugs prováveis na Cebraspe ({sigla}_{aa}). O ano do PCI é o da PROVA;
+    o slug costuma levar o do EDITAL (Sefaz-AL: prova 2020, sefaz_al_19), por
+    isso o ano anterior também. Sufixos (sefaz_al_19_auditor) não se adivinham:
+    ficam para o operador (--slug)."""
+    base = re.sub(r"\bpref(?:\.|eitura)?\s*", "pref ", orgao, flags=re.I)
+    base = re.sub(r"(\d+)\s*[ªºo°]", r"\1", base)              # TRF 6ª -> TRF 6
+    base = slugify(re.sub(r"\b(da|de|do|das|dos)\b|regi[ãa]o", " ", base, flags=re.I))
+    variantes = [base, base.replace("_", ""), re.sub(r"_(\d+)$", r"\1", base)]
+    return list(dict.fromkeys(f"{v}_{a % 100:02d}" for v in variantes if v
+                              for a in (ano, ano - 1)))
+
+
+def confirmar_slug_cebraspe(slug: str, http_get: HttpGet) -> str | None:
+    """O slug canônico (minúsculo) se a API oficial conhece o evento."""
+    status, corpo = http_get(CEBRASPE_API.format(slug=slug))
+    if status == 200 and isinstance(corpo, dict) and corpo.get("eventoURL"):
+        return str(corpo["eventoURL"]).lower()
+    return None
+
+
+def inventario_cebraspe(linhas: list[dict], regras: dict, lido_em: str, *,
+                        http_get: HttpGet = http_get_padrao, pausa: float = 0.4) -> list[dict]:
+    """Agrupa as provas do PCI por (órgão, ano). Só os concursos com
+    carreira sugerida são sondados na API (o resto não vai ser revisado)."""
+    import time
+
+    grupos: dict[tuple, dict] = {}
+    for l in linhas:
+        g = grupos.setdefault((l["orgao_slug"], l["ano"]),
+                              {"orgao": l["orgao"], "ano": l["ano"], "cargos": [], "url": l["url"]})
+        g["cargos"].append(l["cargo"])
+    saida = []
+    for (orgao_slug, ano), g in sorted(grupos.items()):
+        carreira = sugerir_por_cargos(g["orgao"], g["cargos"], regras)
+        slug = None
+        if carreira:
+            for cand in candidatos_slug(g["orgao"], ano):
+                slug = confirmar_slug_cebraspe(cand, http_get)
+                if pausa:
+                    time.sleep(pausa)
+                if slug:
+                    break
+        e = _entrada("cebraspe", f"pci/{orgao_slug}-{ano}", slug, g["orgao"], g["orgao"],
+                     _ano_do_slug(slug) if slug and _ano_do_slug(slug) else ano,
+                     "", g["url"], "cebraspe", {"slug": slug} if slug else None, regras, lido_em)
+        e.update(carreira_sugerida=carreira, cargos=sorted(set(g["cargos"]))[:20],
+                 ano_prova=ano, indice="pci", slug_confirmado=bool(slug))
+        saida.append(e)
+    return saida
+
+
 def inventariar(banca: str, *, regras: dict, destino_dir: Path = INVENTARIO_DIR,
                 http_get: HttpGet = http_get_padrao,
-                fgv_jsonl: Path = INVENTARIO_FGV) -> Path:
+                fgv_jsonl: Path = INVENTARIO_FGV,
+                http_html=None, pausa: float = PCI_PAUSA_S) -> Path:
     lido_em = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     if banca == "fgv":
         if not Path(fgv_jsonl).exists():
@@ -153,11 +247,25 @@ def inventariar(banca: str, *, regras: dict, destino_dir: Path = INVENTARIO_DIR,
         if status != 200 or not isinstance(corpo, dict):
             raise RuntimeError(f"PortalEventos respondeu {status}")
         entradas = inventario_cesgranrio(corpo, regras, lido_em)
+    elif banca == "cebraspe":
+        import time
+
+        http_html = http_html or _http_html_padrao
+        linhas, vistas, pagina = [], set(), 1
+        while True:
+            novas = [l for l in ler_pci(http_html(PCI_LISTAGEM.format(banca="cebraspe", pagina=pagina)))
+                     if l["url"] not in vistas]
+            if not novas:                      # fim da listagem (ou página repetida)
+                break
+            vistas.update(l["url"] for l in novas)
+            linhas += novas
+            pagina += 1
+            if pausa:
+                time.sleep(pausa)
+        entradas = inventario_cebraspe(linhas, regras, lido_em, http_get=http_get,
+                                       pausa=0.4 if pausa else 0)
     else:
-        # Cebraspe: a API não lista eventos (exige o identificador) e o sitemap
-        # não tem concursos. Candidatos virão do índice PCI + confirmação na
-        # API por slug (ADR-0009 §2), em passo próprio.
-        raise ValueError(f"inventário de {banca!r} ainda não implementado (ADR-0009 §2)")
+        raise ValueError(f"inventário de {banca!r} não implementado (ADR-0009 §2)")
     destino = Path(destino_dir) / f"{banca}.jsonl"
     destino.parent.mkdir(parents=True, exist_ok=True)
     tmp = destino.with_suffix(".tmp")
@@ -165,6 +273,14 @@ def inventariar(banca: str, *, regras: dict, destino_dir: Path = INVENTARIO_DIR,
                    encoding="utf-8")
     tmp.replace(destino)
     return destino
+
+
+def _http_html_padrao(url: str) -> str:
+    import requests
+
+    resp = requests.get(url, timeout=30, headers={
+        "User-Agent": "LexCorpus/1.0 (+índice de concursos; documentos só de fonte oficial)"})
+    return resp.text if resp.status_code == 200 else ""
 
 
 def carregar_inventario(destino_dir: Path = INVENTARIO_DIR) -> list[dict]:
@@ -217,6 +333,9 @@ class Revisao:
         sem_ano = [e["chave"] for e in entradas if not e["ano"]]
         if sem_ano:
             raise ValueError(f"sem ano no inventário: {sem_ano}")
+        sem_alvo = [e["chave"] for e in entradas if not e.get("params")]
+        if sem_alvo:
+            raise ValueError(f"sem slug confirmado na API: {sem_alvo} (use --slug chave=SLUG)")
         por_banca: dict[str, int] = {}
         for e in entradas:
             por_banca[e["banca"]] = por_banca.get(e["banca"], 0) + 1
@@ -313,6 +432,8 @@ def main(argv=None) -> int:
     pr.add_argument("--confirmar", help="chaves separadas por vírgula (ex.: fgv:sefazes22)")
     pr.add_argument("--descartar", help="chaves separadas por vírgula")
     pr.add_argument("--motivo", default="")
+    pr.add_argument("--slug", help="Cebraspe: chave=SLUG,... quando a sonda não achou; "
+                                   "o slug é conferido na API oficial antes de valer")
     pa = sub.add_parser("agenda", help="mostra (e completa) a liberação semanal dos confirmados")
     pa.add_argument("--reescalonar", action="store_true",
                     help="refaz a escala dos ainda não liberados (ex.: novos_por_semana mudou)")
@@ -350,6 +471,18 @@ def main(argv=None) -> int:
     inventario = carregar_inventario(inventario_dir)
     por_chave = {e["chave"]: e for e in inventario}
     try:
+        for par in (args.slug or "").split(","):
+            if not par.strip():
+                continue
+            chave, _, slug = par.partition("=")
+            e = por_chave.get(chave.strip())
+            if e is None or e["banca"] != "cebraspe":
+                raise ValueError(f"--slug só para concursos Cebraspe do inventário: {chave!r}")
+            real = confirmar_slug_cebraspe(slug.strip().lower(), http_get_padrao)
+            if not real:
+                raise ValueError(f"a API da Cebraspe não conhece o slug {slug!r}")
+            e.update(concurso=real, params={"slug": real}, slug_confirmado=True,
+                     ano=_ano_do_slug(real) or e["ano"])
         if args.confirmar:
             chaves = [c.strip() for c in args.confirmar.split(",") if c.strip()]
             faltam = [c for c in chaves if c not in por_chave]

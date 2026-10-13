@@ -110,8 +110,16 @@
          (ex.: tjmsjuiz25)
    - [ ] Inventário sem ano (slugs como "tjba", "trf1"): ler o ano na
          página do concurso, ou o operador informa
-   - [ ] inventariar: Cebraspe (índice PCI + confirmação na API por slug;
-         a API não lista eventos e o sitemap não tem concursos)
+   - [X] inventariar: Cebraspe (13/10). Índice PCI /provas/cebraspe (32
+         páginas, 1.600 provas, 149 concursos de 2017 a 2025; robots.txt
+         permite /provas/) + confirmação na API por slug. Medido: 5 fiscais
+         e 9 de tribunais sugeridos, 8 confirmados na API. Sugestão por
+         "órgão ou maioria dos cargos" (cortou prefeituras com 1 auditor
+         entre dezenas de cargos). Ano do PCI = ano da PROVA; o slug costuma
+         levar o do edital (sonda os dois). Sem slug: --slug na revisão,
+         conferido na API
+   - [ ] Revisão: avisar quando o concurso JÁ está no acervo/manual (ex.:
+         SEFAZ/AL 2020 = sefaz_al_19_auditor; SEEC/DF 2020 = seec_auditor_19)
 ** FEITO [#A] ADR-0008: relação related (concurso-alvo)            :ALINHAR_LexPubli:
    ACEITO em 13/10, espelho do ADR-0004 do LexPubli. Mesma banca + mesma
    carreira, em outros órgãos; acervo primeiro (completed na hora).
