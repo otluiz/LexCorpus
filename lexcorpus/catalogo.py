@@ -37,6 +37,8 @@ Estrutura do YAML (versionado):
         params: {}
         cron: "0 */6 * * *"              # frequência de coleta enquanto ativo
         status: coletando                # aguardando_banca | coletando | pausado
+        carreira: fiscal                 # lista fixa do contrato (ADR-0008)
+        data_prova: 2026-12-13           # opcional
         observacao: ""
     passados:
       transpetro_2023:                   # chave = concurso (slug)
@@ -78,6 +80,8 @@ from __future__ import annotations
 
 import datetime
 import json
+import os
+import shutil
 from pathlib import Path
 
 try:
@@ -108,6 +112,16 @@ class Catalogo:
         self.dados = self._carregar()
 
     # --- persistência -------------------------------------------------------
+
+    @classmethod
+    def com_semente(cls, path: str | Path, semente: str | Path = CATALOGO_PATH) -> "Catalogo":
+        """O catálogo de estado nasce como cópia do versionado (a semente,
+        com o acervo marcado pelo operador). Depois de criado, é dele."""
+        path = Path(path)
+        if not path.exists() and Path(semente).exists() and path.resolve() != Path(semente).resolve():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(semente, path)
+        return cls(path)
 
     def _carregar(self) -> dict:
         if yaml is None:
@@ -178,7 +192,8 @@ class Catalogo:
                   edital_data=None, banca=None, banca_rotulo=None,
                   concurso=None, concurso_rotulo=None, cargos=None,
                   spider=None, params=None, cron=None, status="aguardando_banca",
-                  observacao="", substituir=True, lexpubli=None) -> dict:
+                  observacao="", substituir=True, lexpubli=None,
+                  carreira=None, data_prova=None) -> dict:
         """Adiciona um concurso a `vigentes`. Parametrizável: omita banca
         (None) para registrar o alvo ANTES da descoberta — o buscador
         preenche depois (update-busca)."""
@@ -206,6 +221,10 @@ class Catalogo:
             entry["params"] = params
         if cron is not None:
             entry["cron"] = cron
+        if carreira:
+            entry["carreira"] = _carreira_valida(carreira)
+        if data_prova:
+            entry["data_prova"] = data_prova
         if lexpubli:
             # origem no LexPubli (ADR-0007): contest_id, event_id, page_url
             entry["lexpubli"] = lexpubli
@@ -222,6 +241,36 @@ class Catalogo:
             vigentes.append(entry)
         self.salvar()
         return entry
+
+    def marcar_carreira(self, concurso: str, carreira: str, *, organ: str | None = None,
+                        banca: str | None = None, edital_ano: int | None = None) -> dict:
+        """Marca a carreira de um concurso (ADR-0008). Se ele não estiver no
+        catálogo (o acervo coletado antes do catálogo existir), entra em
+        `passados`, e aí órgão, banca e ano são obrigatórios."""
+        carreira = _carreira_valida(carreira)
+        entry = next((v for v in self.dados["vigentes"] if v.get("concurso") == concurso),
+                     None) or self.dados["passados"].get(concurso)
+        if entry is None:
+            if not (organ and banca and edital_ano):
+                raise ValueError(f"{concurso!r} fora do catálogo: informe órgão, banca e ano")
+            entry = self.dados["passados"][concurso] = {
+                "organ": organ, "organ_slug": slugify(organ), "concurso": concurso,
+                "edital_ano": edital_ano, "banca": slugify(banca),
+                "observacao": "acervo marcado pelo operador (ADR-0008)",
+            }
+        entry["carreira"] = carreira
+        self.salvar()
+        return entry
+
+    def por_banca_e_carreira(self, banca: str, carreira: str) -> list[dict]:
+        """Concursos do catálogo (vigentes e passados) da banca e da carreira,
+        os mais recentes primeiro. Quem decide se já foram coletados é o
+        StateStore, não o catálogo."""
+        todos = [*self.dados["vigentes"], *self.dados["passados"].values()]
+        achados = [e for e in todos
+                   if e.get("banca") == banca and e.get("carreira") == carreira
+                   and e.get("concurso")]
+        return sorted(achados, key=lambda e: -(e.get("edital_ano") or 0))
 
     def mover(self, chave: str, de: str = "vigentes", para: str = "passados",
               *, encerrado_em: str | None = None, data_prova: str | None = None,
@@ -305,6 +354,13 @@ class Catalogo:
                 "queries": resultado["queries"]}
 
 
+def _carreira_valida(carreira: str) -> str:
+    from .contratos_lexpubli import carreiras
+    if carreira not in carreiras():
+        raise ValueError(f"carreira {carreira!r} fora da lista do contrato: {carreiras()}")
+    return carreira
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -348,6 +404,14 @@ def main():
     pm.add_argument("--encerrado-em")
     pm.add_argument("--data-prova")
 
+    # carreira (ADR-0008)
+    pc = sub.add_parser("carreira", help="marcar a carreira de um concurso (acervo)")
+    pc.add_argument("--concurso", required=True, help="slug da pasta no acervo")
+    pc.add_argument("--carreira", required=True)
+    pc.add_argument("--organ", help="obrigatório se o concurso não está no catálogo")
+    pc.add_argument("--banca")
+    pc.add_argument("--edital-ano", type=int)
+
     # expire
     pe = sub.add_parser("expire", help="migrar vigentes vencidos para passados")
     pe.add_argument("--hoje", help="data de referência YYYY-MM-DD (default: hoje)")
@@ -360,7 +424,8 @@ def main():
     pu.add_argument("--backend", choices=list(buscador.BACKENDS))
 
     args = p.parse_args()
-    cat = Catalogo()
+    # o mesmo catálogo do consumidor (no Docker, /state/catalogo.yaml)
+    cat = Catalogo(os.environ.get("LEXCORPUS_CATALOGO", CATALOGO_PATH))
 
     if args.comando == "list":
         visao = cat.listar(grupo=args.grupo, organ=args.organ,
@@ -393,6 +458,11 @@ def main():
                   "nenhuma ação necessária")
         else:
             print(f"movido {args.chave}: {args.de} -> {args.para}")
+
+    elif args.comando == "carreira":
+        entry = cat.marcar_carreira(args.concurso, args.carreira, organ=args.organ,
+                                    banca=args.banca, edital_ano=args.edital_ano)
+        print(f"{entry['concurso']}: carreira {entry['carreira']}")
 
     elif args.comando == "expire":
         migrados = cat.expirar(hoje=args.hoje,

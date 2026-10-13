@@ -26,6 +26,7 @@ SCHEMAS_DIR = Path(__file__).resolve().parent.parent / "schema" / "lexpubli" / "
 PRODUCER = "lexcorpus/consumidor"
 
 TIPO_DESCOBERTA = "contest.discovery.created"
+TIPO_ATUALIZACAO = "contest.discovery.updated"
 TIPO_COMPLETED = "document.acquisition.completed"
 TIPO_AWAITING = "document.acquisition.awaiting_operator"
 TIPO_FAILED = "document.acquisition.failed"
@@ -43,6 +44,13 @@ def _registro() -> tuple[Registry, dict[str, dict]]:
         if "." in nome:  # event_type tem ponto; envelope e common são só peças
             por_tipo[nome] = schema
     return registro, por_tipo
+
+
+def carreiras() -> list[str]:
+    """A lista fixa de carreiras da curadoria (ADR-0004 §2), lida do próprio
+    contrato: a cópia do schema é a fonte, não uma constante daqui."""
+    schema = json.loads((SCHEMAS_DIR / "common.schema.json").read_text(encoding="utf-8"))
+    return list(schema["$defs"]["career"]["enum"])
 
 
 def validar(envelope: dict) -> None:

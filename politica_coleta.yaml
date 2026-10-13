@@ -34,3 +34,13 @@ anteriores:
   exige_confirmacao_orgao: true         # visto no catálogo do órgão (índice PCI)
   score_minimo: 4                       # 4 = órgão e banca citados juntos
   cron: "30 6 * * 1"                    # ciclo encerrado: 1x/semana basta
+
+# Concursos já no ACERVO (ADR-0008), da mesma banca e da mesma carreira do
+# concurso anunciado. Mesmo órgão e ano anterior -> previous; outro órgão ->
+# related. Resposta na hora, sem coleta nova. Só a MESMA banca: o DNA do
+# LexLearn é por banca. A carreira vem da curadoria do LexPubli (career) e,
+# no acervo antigo, da marcação do operador:
+#   python -m lexcorpus.catalogo carreira --concurso sefaz_ce_21 --carreira fiscal ...
+relacionados:
+  ativo: true
+  max_por_alvo: 5                       # related por concurso anunciado, mais recentes primeiro

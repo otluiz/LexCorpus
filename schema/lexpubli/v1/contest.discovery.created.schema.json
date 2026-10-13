@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://lex/lexpubli/events/v1/contest.discovery.created.schema.json",
-  "title": "contest.discovery.created - v1.0",
-  "description": "Um concurso foi descoberto E aprovado pela curadoria do LexPubli. Descobertas pendentes ou rejeitadas não geram evento. Consumidor previsto: LexCorpus (entra no catálogo de vigentes).",
+  "title": "contest.discovery.created - v1.1",
+  "description": "Um concurso foi descoberto E aprovado pela curadoria do LexPubli. Descobertas pendentes ou rejeitadas não geram evento. Consumidor previsto: LexCorpus (entra no catálogo de vigentes). v1.1: career e exam_date (opcionais).",
   "allOf": [
     {
       "$ref": "https://lex/lexpubli/events/v1/envelope.schema.json"
@@ -25,168 +25,37 @@
     }
   ],
   "$defs": {
-    "ref_slug": {
-      "type": "object",
-      "required": [
-        "slug",
-        "name"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "slug": {
-          "type": "string",
-          "pattern": "^[a-z0-9]+(_[a-z0-9]+)*$",
-          "description": "Slug canônico, mesmo algoritmo do lexcorpus.util.slugify."
-        },
-        "name": {
-          "type": "string",
-          "minLength": 1,
-          "description": "Rótulo humano, como publicado."
-        }
-      }
-    },
     "data": {
+      "allOf": [
+        {
+          "$ref": "https://lex/lexpubli/events/v1/common.schema.json#/$defs/contest"
+        }
+      ],
       "type": "object",
       "required": [
-        "contest_id",
-        "contest_slug",
         "discovery_id",
-        "title",
-        "organ",
-        "exam_board",
-        "year",
-        "status",
-        "positions",
-        "page_url",
         "source_url"
       ],
       "additionalProperties": false,
       "properties": {
-        "contest_id": {
-          "type": "string",
-          "format": "uuid",
-          "description": "ID estável do concurso no LexPubli."
-        },
-        "contest_slug": {
-          "type": "string",
-          "pattern": "^[a-z0-9]+(_[a-z0-9]+)*$",
-          "description": "Ex.: sefaz_al_2026. Sugestão de chave para o catálogo do LexCorpus."
-        },
+        "contest_id": true,
+        "contest_slug": true,
+        "title": true,
+        "organ": true,
+        "exam_board": true,
+        "year": true,
+        "status": true,
+        "career": true,
+        "exam_date": true,
+        "positions": true,
+        "registration": true,
+        "edital_url": true,
+        "page_url": true,
+        "source_url": true,
         "discovery_id": {
           "type": "string",
           "format": "uuid",
           "description": "A descoberta aprovada que originou o evento."
-        },
-        "title": {
-          "type": "string",
-          "minLength": 1
-        },
-        "organ": {
-          "$ref": "#/$defs/ref_slug"
-        },
-        "exam_board": {
-          "oneOf": [
-            {
-              "$ref": "#/$defs/ref_slug"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "null = banca ainda não definida (status aguardando_banca no LexCorpus)."
-        },
-        "year": {
-          "type": "integer",
-          "minimum": 2000,
-          "maximum": 2100
-        },
-        "status": {
-          "type": "string",
-          "enum": [
-            "previsto",
-            "autorizado",
-            "edital_aberto",
-            "inscricoes_encerradas",
-            "prova_realizada",
-            "resultado",
-            "encerrado"
-          ]
-        },
-        "positions": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "required": [
-              "slug",
-              "name"
-            ],
-            "additionalProperties": false,
-            "properties": {
-              "slug": {
-                "type": "string",
-                "pattern": "^[a-z0-9]+(_[a-z0-9]+)*$"
-              },
-              "name": {
-                "type": "string",
-                "minLength": 1
-              },
-              "vacancies": {
-                "type": [
-                  "integer",
-                  "null"
-                ],
-                "minimum": 0
-              },
-              "salary": {
-                "type": [
-                  "number",
-                  "null"
-                ],
-                "minimum": 0,
-                "description": "Remuneração inicial em BRL."
-              }
-            }
-          }
-        },
-        "registration": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "additionalProperties": false,
-          "properties": {
-            "start": {
-              "type": [
-                "string",
-                "null"
-              ],
-              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
-            },
-            "end": {
-              "type": [
-                "string",
-                "null"
-              ],
-              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
-            }
-          }
-        },
-        "edital_url": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "format": "uri"
-        },
-        "page_url": {
-          "type": "string",
-          "format": "uri",
-          "description": "Página pública do concurso no LexPubli."
-        },
-        "source_url": {
-          "type": "string",
-          "format": "uri",
-          "description": "Fonte onde a descoberta foi feita."
         }
       }
     }

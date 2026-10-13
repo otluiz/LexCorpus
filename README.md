@@ -223,7 +223,9 @@ certames reais daquele órgão.
 ## Concursos aprovados no LexPubli (ADR-0007)
 
 O LexPubli (portal público de concursos) publica `contest.discovery.created`
-quando a curadoria humana dele aprova um concurso. O **consumidor** recebe
+quando a curadoria humana dele aprova um concurso, e `contest.discovery.updated`
+quando a curadoria muda um concurso já anunciado (banca, carreira, data da
+prova, status; o campo `changed` diz o quê). O **consumidor** recebe
 esse aviso e decide o que coletar, pela política versionada em
 `politica_coleta.yaml`: **o LexPubli avisa e o LexCorpus decide.**
 
@@ -237,6 +239,22 @@ O que acontece com cada concurso aprovado:
 - **Concurso anunciado:** se a banca está em `bancas_validadas` e o alvo
   sai das URLs oficiais do evento (ou da listagem pública da Cesgranrio),
   vai para o **watchlist automático**, com o cron conforme a fase.
+- **Acervo (ADR-0008):** concursos **já coletados** da mesma banca e da mesma
+  carreira (`career`, da curadoria do LexPubli). Mesmo órgão e ano anterior
+  → `previous`; outro órgão → `related` (até `relacionados.max_por_alvo`).
+  A resposta `completed` sai na hora, **sem coleta nova**. O acervo antigo
+  ganha carreira pela marcação do operador:
+
+      python -m lexcorpus.catalogo carreira --concurso sefaz_ce_21 --carreira fiscal \
+          --organ Sefaz-CE --banca cebraspe --edital-ano 2021
+
+  A lista de carreiras é a do contrato (`schema/lexpubli/v1/common.schema.json`).
+  No Docker, o catálogo de estado (`/state/catalogo.yaml`) nasce como cópia
+  do `catalogo.yaml` versionado; depois disso, marque com
+  `LEXCORPUS_CATALOGO=/state/catalogo.yaml`.
+- **Atualizações:** banca nova → agenda o concurso atual; status novo → o
+  cron segue a fase; banca ou carreira nova → passa pelo acervo. Uma ligação
+  que já existe não gera resposta de novo.
 - **Certames anteriores:** o buscador (ADR-0006) propõe; a política filtra
   (confirmação no catálogo do órgão, score mínimo, no máximo 3 certames).
 - **O que a política não resolve** vira `document.acquisition.awaiting_operator`

@@ -1,7 +1,7 @@
 # Arquivo:  lexcorpus/consumidor.py
-# Função:   consumidor dos concursos aprovados no LexPubli (ADR-0007). Recebe
-#           contest.discovery.created, aplica a política de coleta
-#           (politica_coleta.yaml) e responde com document.acquisition.*.
+# Função:   consumidor dos concursos aprovados no LexPubli (ADR-0007/0008).
+#           Recebe contest.discovery.created e .updated, aplica a política de
+#           coleta (politica_coleta.yaml) e responde com document.acquisition.*.
 """Consumidor do LexPubli: "o LexPubli avisa, o LexCorpus decide".
 
     python -m lexcorpus.consumidor                 # escuta a fila (longa duração)
@@ -13,10 +13,18 @@ Para cada concurso aprovado:
   2. catálogo: upsert em `vigentes` (chave contest_slug; guarda o contest_id)
   3. concurso ATUAL: banca validada + alvo resolvido -> watchlist automático
      (cron conforme a fase); senão -> awaiting_operator
-  4. certames ANTERIORES: buscador (ADR-0006) -> política -> resolvedor ->
+  4. ACERVO (ADR-0008): concursos já coletados da mesma banca e carreira.
+     Mesmo órgão e ano anterior -> previous; outro órgão -> related (até
+     relacionados.max_por_alvo). completed na hora, sem coleta nova.
+  5. certames ANTERIORES: buscador (ADR-0006) -> política -> resolvedor ->
      watchlist automático; o que sobrar -> awaiting_operator
-  5. concurso já coletado antes -> completed na hora (um recrawl sem
-     novidade não publicaria nada)
+  6. concurso já coletado antes -> completed na hora (um recrawl sem
+     novidade não publicaria nada). Só na PRIMEIRA ligação ao concurso do
+     LexPubli: repetir a ligação não repete a resposta.
+
+contest.discovery.updated (a curadoria mudou o concurso; `changed` diz o quê):
+  catálogo sempre; banca nova -> passo 3; status novo -> cron do atual;
+  banca ou carreira nova -> passo 4. O buscador não roda de novo.
 
 O completed das coletas novas sai do EventoRabbitPipeline, ao publicar o
 concurso para o LexLearn (consulta aquisicao_lexpubli no StateStore).
@@ -85,6 +93,9 @@ def carregar_politica(path: str | Path = POLITICA_PADRAO) -> dict:
     ant.setdefault("exige_confirmacao_orgao", True)
     ant.setdefault("score_minimo", 4)
     ant.setdefault("cron", "30 6 * * 1")
+    rel = dados.setdefault("relacionados", {})
+    rel.setdefault("ativo", False)
+    rel.setdefault("max_por_alvo", 5)
     return dados
 
 
@@ -98,8 +109,9 @@ def processar(envelope: dict, ctx: Contexto) -> str:
         contratos.validar(envelope)
     except Exception as exc:
         raise ContratoInvalido(str(exc)) from exc
-    if envelope["event_type"] != contratos.TIPO_DESCOBERTA:
-        return f"ignorado: {envelope['event_type']}"
+    tipo = envelope["event_type"]
+    if tipo not in (contratos.TIPO_DESCOBERTA, contratos.TIPO_ATUALIZACAO):
+        return f"ignorado: {tipo}"
     if ctx.store.evento_ja_recebido(envelope["event_id"]):
         return f"duplicado: {envelope['event_id']} já processado"
 
@@ -109,8 +121,19 @@ def processar(envelope: dict, ctx: Contexto) -> str:
     banca = (data.get("exam_board") or {}).get("slug")
 
     _catalogar(data, envelope, ctx)
-    _tratar_atual(data, corr, banca, ctx)
-    _tratar_anteriores(data, corr, ctx)
+    if tipo == contratos.TIPO_DESCOBERTA:
+        _tratar_atual(data, corr, banca, ctx)
+        _tratar_acervo(data, corr, banca, ctx)
+        _tratar_anteriores(data, corr, ctx)
+    else:
+        mudou = set(data["changed"])
+        ctx.anotar("atualização: " + ", ".join(sorted(mudou)))
+        if "exam_board" in mudou:
+            _tratar_atual(data, corr, banca, ctx)
+        elif "status" in mudou:
+            _atualizar_cron(data, ctx)
+        if mudou & {"exam_board", "career"}:
+            _tratar_acervo(data, corr, banca, ctx)
 
     resumo = "; ".join(ctx.resumo)
     ctx.store.registrar_evento_recebido(envelope["event_id"], envelope["event_type"], resumo)
@@ -130,6 +153,8 @@ def _catalogar(data: dict, envelope: dict, ctx: Contexto) -> None:
         cargos=[p["name"] for p in data.get("positions", [])],
         status="coletando" if banca else "aguardando_banca",
         observacao="via LexPubli (ADR-0007)",
+        carreira=data.get("career"),
+        data_prova=data.get("exam_date"),
         lexpubli={"contest_id": data["contest_id"], "event_id": envelope["event_id"],
                   "page_url": data["page_url"]},
     )
@@ -158,6 +183,64 @@ def _tratar_atual(data: dict, corr: str, banca: str | None, ctx: Contexto) -> No
         return
     cron = ctx.politica["cron_por_status"].get(data["status"], "0 7 * * *")
     _agendar(alvo, cron, "current", data, corr, data["year"], ctx)
+
+
+def _tratar_acervo(data: dict, corr: str, banca: str | None, ctx: Contexto) -> None:
+    """ADR-0008: o que já foi coletado serve ao alvo sem coleta nova. Mesma
+    banca obrigatória (o DNA é por banca) e mesma carreira."""
+    pol = ctx.politica["relacionados"]
+    carreira = data.get("career")
+    if not pol["ativo"]:
+        ctx.anotar("acervo: desligado")
+        return
+    if not (banca and carreira):
+        ctx.anotar("acervo: sem banca ou carreira")
+        return
+    organ = data["organ"]["slug"]
+    relacionados = 0
+    for e in ctx.catalogo.por_banca_e_carreira(banca, carreira):
+        concurso, ano = e["concurso"], e.get("edital_ano")
+        if ctx.store.contagem_vigentes(banca, concurso) is None:
+            continue                                  # no catálogo, mas não coletado
+        if e.get("organ_slug") == organ:
+            if not (isinstance(ano, int) and ano < data["year"]):
+                continue                              # o próprio alvo, ou um futuro
+            relation = "previous"
+        else:
+            if relacionados >= pol["max_por_alvo"]:
+                continue
+            relacionados += 1
+            relation = "related"
+        _ligar_acervo(banca, concurso, relation, ano, data, corr, ctx)
+
+
+def _ligar_acervo(banca: str, concurso: str, relation: str, ano: int | None,
+                  data: dict, corr: str, ctx: Contexto) -> None:
+    contest_id = data["contest_id"]
+    if ctx.store.aquisicao_existe(banca, concurso, contest_id):
+        return
+    ctx.store.registrar_aquisicao(banca, concurso, contest_id, corr, relation, ano=ano)
+    ctx.respondedor.completed(contest_id=contest_id, correlation_id=corr, relation=relation,
+                              banca=banca, concurso=concurso,
+                              contagem=ctx.store.contagem_vigentes(banca, concurso), ano=ano)
+    ctx.anotar(f"{relation}: {banca}/{concurso} do acervo -> completed")
+
+
+def _atualizar_cron(data: dict, ctx: Contexto) -> None:
+    """O status mudou: o cron do concurso atual no watchlist automático
+    segue a fase (cron_por_status)."""
+    path = Path(ctx.watchlist_auto)
+    if not path.exists():
+        return
+    cron = ctx.politica["cron_por_status"].get(data["status"], "0 7 * * *")
+    dados = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    meta = {"contest_id": data["contest_id"], "relation": "current"}
+    alterados = [a for a in dados.get("alvos", []) if meta in a.get("lexpubli", [])]
+    for a in alterados:
+        a["cron"] = cron
+    if alterados:
+        _gravar_watchlist_auto(path, dados)
+        ctx.anotar(f"atual: cron {cron!r} (status {data['status']})")
 
 
 def _tratar_anteriores(data: dict, corr: str, ctx: Contexto) -> None:
@@ -241,10 +324,11 @@ def _agendar(alvo: Alvo, cron: str, relation: str, data: dict, corr: str,
     Já coletado antes -> completed na hora: um recrawl sem novidade não
     publicaria nada, e o LexPubli ficaria sem resposta.
     """
+    nova = not ctx.store.aquisicao_existe(alvo.banca, alvo.concurso, data["contest_id"])
     ctx.store.registrar_aquisicao(alvo.banca, alvo.concurso, data["contest_id"], corr,
                                   relation, ano=ano)
     contagem = ctx.store.contagem_vigentes(alvo.banca, alvo.concurso)
-    if contagem is not None:
+    if contagem is not None and nova:
         ctx.respondedor.completed(contest_id=data["contest_id"], correlation_id=corr,
                                   relation=relation, banca=alvo.banca, concurso=alvo.concurso,
                                   contagem=contagem, ano=ano)
@@ -278,6 +362,10 @@ def registrar_alvo_auto(path: Path, alvo: Alvo, cron: str, meta: dict) -> None:
         alvos.append(existente)
     if meta not in existente.setdefault("lexpubli", []):
         existente["lexpubli"].append(meta)
+    _gravar_watchlist_auto(path, dados)
+
+
+def _gravar_watchlist_auto(path: Path, dados: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
     tmp.write_text("# GERADO pelo lexcorpus.consumidor (ADR-0007). Não edite: o\n"
@@ -353,7 +441,7 @@ def main(argv=None) -> int:
     def fabrica(canal) -> Contexto:
         return Contexto(
             store=StateStore(args.state_db),
-            catalogo=Catalogo(args.catalogo),
+            catalogo=Catalogo.com_semente(args.catalogo),
             politica=carregar_politica(args.politica),
             respondedor=Respondedor(channel=canal, exchange=exchange_resposta, out_dir=out_dir),
             watchlist_auto=Path(args.watchlist_auto),

@@ -443,3 +443,152 @@ def test_consumidor_nao_usa_o_broker_do_lexlearn(monkeypatch, capsys):
     monkeypatch.setattr(consumidor, "escutar", lambda *a: pytest.fail("escutou no broker do LexLearn"))
     assert consumidor.main([]) == 2
     assert "LEXPUBLI_RABBIT_URL" in capsys.readouterr().err
+
+
+# -- ADR-0008: acervo (previous/related) e contest.discovery.updated ---------
+
+ATUALIZACAO = json.loads(Path("schema/lexpubli/v1/examples/contest.discovery.updated.json")
+                         .read_text(encoding="utf-8"))
+
+
+def atualizacao(event_id, changed, **data):
+    env = copy.deepcopy(ATUALIZACAO)
+    env["event_id"] = event_id
+    env["data"].update(data, changed=changed)
+    return env
+
+
+def no_acervo(c, banca, concurso, *, organ, ano, carreira=None, n_provas=2):
+    """Concurso já coletado: arquivos no StateStore + entrada no catálogo."""
+    c.store.upsert_arquivos([
+        {"banca": banca, "concurso": concurso, "nome": f"p{i}.pdf", "papel": "prova",
+         "cargos": ["auditor_fiscal"], "checksum_sha256": f"{concurso}{i}", "tamanho_bytes": 1}
+        for i in range(n_provas)])
+    if carreira:
+        c.catalogo.marcar_carreira(concurso, carreira, organ=organ, banca=banca, edital_ano=ano)
+
+
+def completed(envs):
+    return {(e["data"]["lexcorpus_contest"], e["data"]["relation"]): e for e in envs
+            if e["event_type"] == "document.acquisition.completed"}
+
+
+def acervo_fiscal(c):
+    no_acervo(c, "cebraspe", "sefaz_ce_21", organ="Sefaz-CE", ano=2021, carreira="fiscal")
+    no_acervo(c, "cebraspe", "seec_auditor_19", organ="SEEC-DF", ano=2019, carreira="fiscal")
+    no_acervo(c, "cebraspe", "sefaz_al_19_auditor", organ="Sefaz-AL", ano=2019, carreira="fiscal")
+    no_acervo(c, "cebraspe", "prf_21", organ="PRF", ano=2021, carreira="policial")
+    no_acervo(c, "fgv", "sefaz_mt_23", organ="Sefaz-MT", ano=2023, carreira="fiscal")
+    # no catálogo como fiscal, mas nunca coletado
+    c.catalogo.marcar_carreira("sefaz_rs_25", "fiscal", organ="Sefaz-RS", banca="cebraspe",
+                               edital_ano=2025)
+
+
+def test_aceite_sefaz_al_2026_recebe_o_acervo_fiscal_sem_coleta_nova(ctx, tmp_path):
+    """O teste de aceite da Fase 1 (LexPubli ADR-0004): sem coleta nova."""
+    c = ctx()
+    acervo_fiscal(c)
+    env = evento()
+    cons.processar(env, c)
+
+    resp = completed(respostas(tmp_path))
+    assert set(resp) == {("sefaz_ce_21", "related"), ("seec_auditor_19", "related"),
+                         ("sefaz_al_19_auditor", "previous")}
+    assert all(e["correlation_id"] == env["event_id"] for e in resp.values())
+    assert resp[("sefaz_ce_21", "related")]["data"]["files"]["prova"] == 2
+    assert resp[("sefaz_ce_21", "related")]["data"]["year"] == 2021
+    # nada do acervo foi para coleta: só o concurso atual está no watchlist
+    assert [a["params"] for a in watchlist_auto(tmp_path)] == [{"slug": "sefaz_al_26"}]
+    # e o pipeline responde de novo quando o concurso for recoletado
+    assert c.store.aquisicoes_de("cebraspe", "sefaz_ce_21")[0]["relation"] == "related"
+
+
+def test_relacionados_respeitam_o_limite_mais_recentes_primeiro(ctx, tmp_path):
+    c = ctx(relacionados={"max_por_alvo": 1})
+    acervo_fiscal(c)
+    cons.processar(evento(), c)
+    rel = [k for k in completed(respostas(tmp_path)) if k[1] == "related"]
+    assert rel == [("sefaz_ce_21", "related")]       # 2021 antes de 2019
+
+
+def test_sem_carreira_nao_liga_o_acervo(ctx, tmp_path):
+    c = ctx()
+    acervo_fiscal(c)
+    cons.processar(evento(career=None), c)
+    assert completed(respostas(tmp_path)) == {}
+
+
+def test_politica_desligada_nao_liga_o_acervo(ctx, tmp_path):
+    c = ctx(relacionados={"ativo": False})
+    acervo_fiscal(c)
+    cons.processar(evento(), c)
+    assert completed(respostas(tmp_path)) == {}
+
+
+def test_carreira_definida_depois_liga_o_acervo_uma_vez(ctx, tmp_path):
+    c = ctx()
+    acervo_fiscal(c)
+    cons.processar(evento(career=None), c)
+    up = atualizacao("01a13a52-3c1e-7f0a-9b44-5d2e8a7c1f31", ["career"], career="fiscal")
+    cons.processar(up, c)
+    resp = completed(respostas(tmp_path))
+    assert len(resp) == 3
+    assert all(e["correlation_id"] == up["event_id"] for e in resp.values())
+
+    # outra atualização da carreira: a ligação já existe, nada se repete
+    cons.processar(atualizacao("01a13a52-3c1e-7f0a-9b44-5d2e8a7c1f32", ["career"]), c)
+    assert len([e for e in respostas(tmp_path)
+                if e["event_type"] == "document.acquisition.completed"]) == 3
+
+
+def test_atualizacao_grava_carreira_e_data_no_catalogo(ctx, tmp_path):
+    c = ctx()
+    cons.processar(evento(career=None), c)
+    cons.processar(atualizacao("01a13a52-3c1e-7f0a-9b44-5d2e8a7c1f33", ["exam_date", "career"],
+                               career="fiscal", exam_date="2026-12-13"), c)
+    entry = Catalogo(tmp_path / "catalogo.yaml").dados["vigentes"][0]
+    assert (entry["carreira"], entry["data_prova"]) == ("fiscal", "2026-12-13")
+
+
+def test_status_novo_muda_o_cron_do_atual(ctx, tmp_path):
+    c = ctx()
+    cons.processar(evento(), c)
+    cons.processar(atualizacao("01a13a52-3c1e-7f0a-9b44-5d2e8a7c1f34", ["status"],
+                               status="prova_realizada"), c)
+    [alvo] = watchlist_auto(tmp_path)
+    assert alvo["cron"] == c.politica["cron_por_status"]["prova_realizada"]
+
+
+def test_banca_definida_depois_agenda_o_atual(ctx, tmp_path):
+    c = ctx()
+    cons.processar(evento(exam_board=None), c)
+    assert watchlist_auto(tmp_path) == []
+    cons.processar(atualizacao("01a13a52-3c1e-7f0a-9b44-5d2e8a7c1f35", ["exam_board"]), c)
+    assert [a["params"] for a in watchlist_auto(tmp_path)] == [{"slug": "sefaz_al_26"}]
+
+
+def test_atualizacao_repetida_e_ignorada(ctx, tmp_path):
+    c = ctx()
+    cons.processar(evento(), c)
+    up = atualizacao("01a13a52-3c1e-7f0a-9b44-5d2e8a7c1f36", ["status"], status="resultado")
+    cons.processar(up, c)
+    assert cons.processar(up, c).startswith("duplicado")
+
+
+def test_carreira_fora_da_lista_do_contrato_e_recusada(tmp_path):
+    cat = Catalogo(tmp_path / "c.yaml")
+    with pytest.raises(ValueError, match="fora da lista"):
+        cat.marcar_carreira("x_21", "magistratura", organ="X", banca="fgv", edital_ano=2021)
+    with pytest.raises(ValueError, match="órgão, banca e ano"):
+        cat.marcar_carreira("x_21", "fiscal")
+
+
+def test_catalogo_de_estado_nasce_da_semente_e_depois_e_dele(tmp_path):
+    semente = tmp_path / "semente.yaml"
+    Catalogo(semente).marcar_carreira("sefaz_ce_21", "fiscal", organ="Sefaz-CE",
+                                      banca="cebraspe", edital_ano=2021)
+    estado = tmp_path / "state" / "catalogo.yaml"
+    assert "sefaz_ce_21" in Catalogo.com_semente(estado, semente).dados["passados"]
+    Catalogo(estado).marcar_carreira("prf_21", "policial", organ="PRF", banca="cebraspe",
+                                     edital_ano=2021)
+    assert "prf_21" in Catalogo.com_semente(estado, semente).dados["passados"]  # não recopia

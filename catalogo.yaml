@@ -13,4 +13,28 @@ vigentes:
   observacao: ''
   edital_data: '2026-08-01'
   encerrado_em: '2027-09-01'
-passados: {}
+passados:
+  sefaz_ce_21:
+    organ: Sefaz-CE
+    organ_slug: sefaz_ce
+    concurso: sefaz_ce_21
+    edital_ano: 2021
+    banca: cebraspe
+    observacao: acervo marcado pelo operador (ADR-0008)
+    carreira: fiscal
+  seec_auditor_19:
+    organ: SEEC-DF
+    organ_slug: seec_df
+    concurso: seec_auditor_19
+    edital_ano: 2019
+    banca: cebraspe
+    observacao: acervo marcado pelo operador (ADR-0008)
+    carreira: fiscal
+  sefaz_al_19_auditor:
+    organ: Sefaz-AL
+    organ_slug: sefaz_al
+    concurso: sefaz_al_19_auditor
+    edital_ano: 2019
+    banca: cebraspe
+    observacao: acervo marcado pelo operador (ADR-0008)
+    carreira: fiscal

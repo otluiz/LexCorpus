@@ -59,17 +59,25 @@
     cache. Política de expurgo, se um dia existir, será objeto de estudo.
 
 * Em andamento / próximos
-** TODO [#A] ADR-0008: relação related (concurso-alvo)            :ALINHAR_LexPubli:
+** FEITO [#A] ADR-0008: relação related (concurso-alvo)            :ALINHAR_LexPubli:
    ACEITO em 13/10, espelho do ADR-0004 do LexPubli. Mesma banca + mesma
    carreira, em outros órgãos; acervo primeiro (completed na hora).
-   - [ ] Atualizar a cópia schema/lexpubli/v1/ para a v1.1 (career,
-         exam_date, contest.discovery.updated) ANTES de o LexPubli emitir
-   - [ ] Campo carreira no catálogo; marcar o acervo existente (fiscal:
-         sefaz_ce_21, sefaz_al_19_auditor, seec_auditor_19, sefaz_al_19)
-   - [ ] Consumidor: related a partir do acervo; politica_coleta.yaml
-         ganha a seção relacionados (mesma banca, máx. 5)
-   - [ ] Consumir contest.discovery.updated (carreira/banca tardias)
-   - [ ] Emitir relation=related só depois que o LexPubli aceitar
+   CLOSED: 2026-10-13 (Fase 1 do LexPubli ADR-0004)
+   - [X] Cópia schema/lexpubli/v1/ na v1.1 (career, exam_date,
+         contest.discovery.updated, related) ANTES de o LexPubli emitir
+   - [X] Campo carreira no catálogo (lista do contrato) + CLI `carreira`;
+         acervo fiscal marcado no catalogo.yaml: sefaz_ce_21,
+         sefaz_al_19_auditor, seec_auditor_19 (o "sefaz_al_19" listado
+         antes não existe no acervo)
+   - [X] Consumidor: acervo -> previous (mesmo órgão) / related (outro
+         órgão, máx. 5); politica_coleta.yaml seção relacionados
+   - [X] Consumir contest.discovery.updated; resposta só na 1ª ligação
+   - [X] Catálogo de estado semeado do versionado; CLI respeita
+         LEXCORPUS_CATALOGO
+   - [X] Aceite em teste: Sefaz-AL 2026 recebe o acervo fiscal sem coleta
+   - [ ] Marcar o resto do acervo (prf_21, bacen13_analista,
+         serpro13_analista_ti...) — decisão do operador
+   - [ ] Fonte 2 do related (descoberta: inventários e buscador) — depois
 ** FEITO [#A] Broker do LexPubli separado do v2.1 (LexPubli ADR-0005 §2a) :ALINHAR_LexPubli:
    A automação LexPubli ↔ LexCorpus sai do broker do LexLearn. Hoje uma
    RABBIT_URL servia o v2.1, o consumidor e as respostas document.*.

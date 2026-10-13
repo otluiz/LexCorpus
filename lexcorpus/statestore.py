@@ -208,6 +208,12 @@ class StateStore:
         )
         self._conn.commit()
 
+    def aquisicao_existe(self, banca: str, concurso: str, contest_id: str) -> bool:
+        cur = self._conn.execute(
+            "SELECT 1 FROM aquisicao_lexpubli WHERE banca = ? AND concurso = ?"
+            " AND contest_id = ?", (banca, concurso, contest_id))
+        return cur.fetchone() is not None
+
     def aquisicoes_de(self, banca: str, concurso: str) -> list[dict]:
         """Os concursos do LexPubli atendidos por este concurso do LexCorpus."""
         cur = self._conn.execute(
