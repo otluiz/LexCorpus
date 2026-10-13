@@ -11,7 +11,7 @@
         "event_type": { "const": "document.acquisition.completed" },
         "event_version": { "pattern": "^1\\.[0-9]+$" },
         "producer": { "pattern": "^lexcorpus(/[a-z0-9_.-]+)?$" },
-        "correlation_id": { "$ref": "https://lex/lexpubli/events/v1/common.schema.json#/$defs/uuid", "description": "event_id do contest.discovery.created que originou a coleta. Obrigatório." },
+        "correlation_id": { "$ref": "https://lex/lexpubli/events/v1/common.schema.json#/$defs/uuid", "description": "event_id do contest.discovery.created ou .updated que originou a resposta. Obrigatório." },
         "data": { "$ref": "#/$defs/data" }
       }
     }
