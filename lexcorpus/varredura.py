@@ -15,6 +15,9 @@ nos spiders de banca.
     python -m lexcorpus.varredura revisar --carreira fiscal --confirmar fgv:sefazes22,fgv:sefazmt23
     python -m lexcorpus.varredura revisar --carreira fiscal --descartar fgv:x21 --motivo "não é tributário"
 
+    # 3. a liberação semanal (varredura.novos_por_semana)
+    python -m lexcorpus.varredura agenda
+
 O confirmado vai para o catálogo (com a carreira) e para o watchlist da
 varredura, até `varredura.max_por_carreira_e_banca` por banca. O scheduler
 lê esse watchlist junto com o manual e o automático; o manual é soberano.
@@ -27,7 +30,7 @@ import logging
 import os
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import yaml
@@ -180,8 +183,10 @@ class Revisao:
 
     def __init__(self, *, politica: dict, catalogo: Catalogo,
                  decisoes: Path = DECISOES_PADRAO,
-                 watchlist: Path = WATCHLIST_VARREDURA_PADRAO):
+                 watchlist: Path = WATCHLIST_VARREDURA_PADRAO,
+                 hoje: date | None = None):
         self.pol = politica["varredura"]
+        self.hoje = hoje or date.today()
         self.validadas = set(politica["bancas_validadas"])
         self.catalogo = catalogo
         self.path_decisoes, self.path_watchlist = Path(decisoes), Path(watchlist)
@@ -231,6 +236,32 @@ class Revisao:
         self._salvar()
         return [e["chave"] for e in entradas]
 
+    def escalonar(self) -> None:
+        """Dá a cada confirmado sem data uma `a_partir_de`: no máximo
+        `novos_por_semana` liberados por semana (segunda a domingo), nunca
+        antes de hoje, na ordem de
+        confirmação (e, no lote, os mais recentes primeiro). O LexLearn recebe
+        os concursos aos poucos, não todos na primeira passada do scheduler."""
+        por_semana = max(1, int(self.pol["novos_por_semana"]))
+        segunda = self.hoje - timedelta(days=self.hoje.weekday())
+
+        def semana_de(iso: str) -> date:
+            d = date.fromisoformat(iso)
+            return d - timedelta(days=d.weekday())
+
+        ocupadas: dict[date, int] = {}
+        for c in self.confirmados.values():
+            if c.get("a_partir_de") and semana_de(c["a_partir_de"]) >= segunda:
+                ocupadas[semana_de(c["a_partir_de"])] = ocupadas.get(semana_de(c["a_partir_de"]), 0) + 1
+        sem_data = sorted((c for c in self.confirmados.values() if not c.get("a_partir_de")),
+                          key=lambda c: (c["confirmado_em"], -(c["ano"] or 0)))
+        semana = segunda
+        for c in sem_data:
+            while ocupadas.get(semana, 0) >= por_semana:
+                semana += timedelta(weeks=1)
+            c["a_partir_de"] = max(semana, self.hoje).isoformat()
+            ocupadas[semana] = ocupadas.get(semana, 0) + 1
+
     def descartar(self, chaves: list[str], motivo: str) -> None:
         agora = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         for chave in chaves:
@@ -238,12 +269,14 @@ class Revisao:
         self._salvar()
 
     def _salvar(self) -> None:
+        self.escalonar()
         self.path_decisoes.parent.mkdir(parents=True, exist_ok=True)
         _gravar(self.path_decisoes, "decisões do operador na varredura (ADR-0009)",
                 {"version": 1, "confirmados": self.confirmados, "descartados": self.descartados})
         alvos = [{"banca": c["banca"], "spider": c["spider"], "params": c["params"],
                   "concurso": c["concurso"], "cron": self.pol["cron"], "ativo": True,
-                  "origem": "varredura", "carreira": c["carreira"]}
+                  "origem": "varredura", "carreira": c["carreira"],
+                  "a_partir_de": c["a_partir_de"]}
                  for c in self.confirmados.values()]
         _gravar(self.path_watchlist, "GERADO pela varredura (ADR-0009). Não edite: o "
                 "watchlist.yaml manual é soberano", {"version": 1, "alvos": alvos})
@@ -271,6 +304,7 @@ def main(argv=None) -> int:
     pr.add_argument("--confirmar", help="chaves separadas por vírgula (ex.: fgv:sefazes22)")
     pr.add_argument("--descartar", help="chaves separadas por vírgula")
     pr.add_argument("--motivo", default="")
+    sub.add_parser("agenda", help="mostra (e completa) a liberação semanal dos confirmados")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     # tudo ao lado do watchlist da varredura (no Docker, /state), o mesmo que o scheduler lê
@@ -294,6 +328,12 @@ def main(argv=None) -> int:
     rev = Revisao(politica=carregar_politica(os.environ.get("LEXCORPUS_POLITICA", POLITICA_PADRAO)),
                   catalogo=Catalogo.com_semente(os.environ.get("LEXCORPUS_CATALOGO", CATALOGO_PATH)),
                   decisoes=decisoes, watchlist=watchlist)
+    if args.comando == "agenda":
+        rev._salvar()                       # escalona quem ainda não tem data
+        for chave, c in sorted(rev.confirmados.items(), key=lambda kv: (kv[1]["a_partir_de"], kv[0])):
+            print(f"  {c['a_partir_de']}  {c['carreira']:<10} {chave}")
+        return 0
+
     inventario = carregar_inventario(inventario_dir)
     por_chave = {e["chave"]: e for e in inventario}
     try:

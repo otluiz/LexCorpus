@@ -82,6 +82,8 @@ def carregar_watchlist(path: Path) -> list[dict]:
                 "settings": dict(entrada.get("settings") or {}),
                 "cron": entrada.get("cron"),
                 "rotulo": _rotulo(entrada),
+                # varredura (ADR-0009): não dispara antes desta data (AAAA-MM-DD)
+                "a_partir_de": entrada.get("a_partir_de"),
             })
     return alvos
 
@@ -152,6 +154,8 @@ def alvos_vencidos(alvos: list[dict], estado: dict,
     """Alvos cujo último tick de cron ainda não foi disparado com sucesso."""
     vencidos = []
     for alvo in alvos:
+        if alvo.get("a_partir_de") and agora.date().isoformat() < str(alvo["a_partir_de"]):
+            continue                     # liberação escalonada (ADR-0009)
         tick = tick_vencido(alvo["cron"], agora)
         if tick is None:
             log.warning("alvo %s sem cron válido — ignorado", alvo["chave"])

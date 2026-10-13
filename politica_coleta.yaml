@@ -54,4 +54,7 @@ varredura:
   ativo: true
   carreiras: [fiscal, tribunais]
   max_por_carreira_e_banca: 5           # os mais recentes primeiro
-  cron: "45 5 * * 2"                    # 1x/semana: o ritmo de entrada no LexLearn
+  cron: "45 5 * * 2"                    # recoleta semanal de cada alvo já liberado
+  novos_por_semana: 1                   # concursos NOVOS liberados por semana: o ritmo
+                                        # de entrada no LexLearn (cada confirmado ganha
+                                        # uma data a_partir_de escalonada)

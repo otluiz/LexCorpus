@@ -307,6 +307,11 @@ eixo da busca; a coleta continua nos spiders de banca.
 - O confirmado entra no catálogo (com a carreira) e no
   `watchlist.varredura.yaml` (gerado), que o scheduler lê junto com o manual
   e o automático; o manual é soberano.
+- **Liberação escalonada:** cada confirmado ganha uma data `a_partir_de`, no
+  máximo `varredura.novos_por_semana` por semana, e o scheduler não o dispara
+  antes. Sem isso, um alvo novo é coletado na primeira passada, e o lote
+  inteiro entraria no LexLearn de uma vez. `python -m lexcorpus.varredura
+  agenda` mostra a escala.
 - Cebraspe: a API não lista eventos; o inventário dela (índice PCI +
   confirmação na API) ainda não existe.
 

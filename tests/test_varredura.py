@@ -3,6 +3,8 @@
 #           inventário da FGV e da Cesgranrio, revisão em lote com teto e o
 #           watchlist da varredura no scheduler. Sem rede.
 """Rodar:  pytest tests/test_varredura.py -v"""
+from datetime import date, datetime
+
 import pytest
 import yaml
 
@@ -100,14 +102,17 @@ def test_cebraspe_ainda_nao_tem_inventario(tmp_path):
 
 # --- revisão --------------------------------------------------------------------
 
+HOJE = date(2026, 10, 13)
+
+
 @pytest.fixture
 def rev(tmp_path):
-    def fabricar(**varredura):
+    def fabricar(hoje=HOJE, **varredura):
         pol = carregar_politica()
         pol["varredura"].update(varredura)
         return var.Revisao(politica=pol, catalogo=Catalogo(tmp_path / "catalogo.yaml"),
                            decisoes=tmp_path / "varredura.yaml",
-                           watchlist=tmp_path / "watchlist.varredura.yaml")
+                           watchlist=tmp_path / "watchlist.varredura.yaml", hoje=hoje)
     return fabricar
 
 
@@ -175,3 +180,33 @@ def test_scheduler_le_a_varredura_e_o_manual_e_soberano(tmp_path):
     assert len(alvos) == 2
     assert alvos[0]["cron"] == "0 1 * * *"                      # o do operador
     assert alvos[1]["rotulo"].endswith("(varredura)")
+
+
+
+# --- liberação escalonada (o ritmo de entrada no LexLearn) ---------------------
+
+def datas(r):
+    return {k: c["a_partir_de"] for k, c in r.confirmados.items()}
+
+
+def test_um_novo_por_semana_mais_recentes_primeiro(rev):
+    r = rev(novos_por_semana=1)
+    r.confirmar(fiscais(3), "fiscal")
+    # 13/10 é terça: a 1ª semana começa hoje; as seguintes, na segunda-feira
+    assert datas(r) == {"fgv:sefaz2": "2026-10-13", "fgv:sefaz1": "2026-10-19",
+                        "fgv:sefaz0": "2026-10-26"}
+
+
+def test_lote_seguinte_continua_a_fila(rev):
+    rev(novos_por_semana=2).confirmar(fiscais(3), "fiscal")
+    r = rev(novos_por_semana=2, hoje=date(2026, 10, 14))
+    r.confirmar(fiscais(1, banca="cesgranrio"), "fiscal")
+    # a semana de 12/10 já tem 2; a de 19/10 tem 1 e ainda cabe mais um
+    assert datas(r)["cesgranrio:sefaz0"] == "2026-10-19"
+
+
+def test_scheduler_nao_dispara_antes_da_liberacao():
+    alvos = [{"chave": "a", "cron": "45 5 * * 2", "a_partir_de": "2026-10-20", "rotulo": "a"},
+             {"chave": "b", "cron": "45 5 * * 2", "a_partir_de": "2026-10-13", "rotulo": "b"}]
+    agora = datetime(2026, 10, 13, 6, 0).astimezone()
+    assert [a["chave"] for a in sch.alvos_vencidos(alvos, {}, agora)] == ["b"]

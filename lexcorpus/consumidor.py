@@ -101,6 +101,7 @@ def carregar_politica(path: str | Path = POLITICA_PADRAO) -> dict:
     var.setdefault("carreiras", [])
     var.setdefault("max_por_carreira_e_banca", 5)
     var.setdefault("cron", "45 5 * * 2")
+    var.setdefault("novos_por_semana", 1)
     return dados
 
 

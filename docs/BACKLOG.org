@@ -76,9 +76,18 @@
          inteiro se passar do teto ou faltar o ano) + descartados
    - [X] política varredura + watchlist.varredura.yaml + scheduler (o
          manual é soberano); Dockerfile: LEXCORPUS_WATCHLIST_VARREDURA
-   - [ ] PRIMEIRA LEVA (operador): até 5 fiscais e 5 de tribunais da FGV.
-         Atenção na revisão: processos seletivos simplificados (PSS) e
-         concursos de juiz cujo rótulo não diz "juiz" (ex.: tjmsjuiz25)
+   - [X] PRIMEIRA LEVA confirmada em 13/10 (estado do notebook, volume
+         lexcorpus_lexcorpus-state): fiscal seappr25, sefazmt23, rfb22,
+         saebba22, sefazam22; tribunais tjscservidor26, tjce25, tjgo2025,
+         tjpr25, tjrjservidores25
+   - [X] Liberação escalonada (novos_por_semana: 1): a_partir_de de
+         13/10 a 14/12; o scheduler não dispara antes. Corrige o disparo
+         do lote inteiro na primeira passada
+   - [ ] Scheduler rodando de fato (nenhum ativo no notebook em 13/10); na
+         subida ao gpu01, levar o estado da varredura (varredura.yaml,
+         watchlist.varredura.yaml, inventario/) e o catálogo de estado
+   - [ ] Na revisão: PSS (temporários) e juiz cujo rótulo não diz "juiz"
+         (ex.: tjmsjuiz25)
    - [ ] Inventário sem ano (slugs como "tjba", "trf1"): ler o ano na
          página do concurso, ou o operador informa
    - [ ] inventariar: Cebraspe (índice PCI + confirmação na API por slug;
