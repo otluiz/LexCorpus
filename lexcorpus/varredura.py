@@ -48,6 +48,7 @@ REGRAS_PADRAO = RAIZ / "carreiras_regras.yaml"
 INVENTARIO_DIR = Path("state/inventario")
 DECISOES_PADRAO = Path("state/varredura.yaml")
 WATCHLIST_VARREDURA_PADRAO = Path("state/watchlist.varredura.yaml")
+WATCHLIST_MANUAL_PADRAO = RAIZ / "watchlist.yaml"      # o mesmo default do scheduler
 
 # Cebraspe: a API não lista eventos. O índice é a listagem do PCI por banca
 # (só leitura de /provas/, permitido no robots.txt; nunca PDF), e cada
@@ -434,6 +435,48 @@ def _http_html_padrao(url: str) -> str:
     return resp.text if resp.status_code == 200 else ""
 
 
+def _anos_no_nome(nome: str) -> set[int]:
+    """Anos escritos num nome de concurso: sefaz_al_19_auditor -> {2019}."""
+    anos = set()
+    for parte in re.split(r"[_\-]", nome or ""):
+        if parte.isdigit() and len(parte) in (2, 4):
+            n = int(parte)
+            ano = n if n >= 1000 else 2000 + n
+            if 2000 <= ano <= 2100:
+                anos.add(ano)
+    return anos
+
+
+def ja_no_acervo(entrada: dict, catalogo: list[dict], manuais: list[dict]) -> list[str]:
+    """Concursos do catálogo ou do watchlist manual que parecem ser este:
+    mesma banca, mesmo órgão (slug) e ano a no máximo 1 de distância (o PCI
+    traz o ano da prova; o slug, o do edital). Só AVISA; quem decide é o
+    operador. Ex.: SEFAZ/AL 2020 (PCI) = sefaz_al_19_auditor (acervo)."""
+    banca, ano, nome = entrada["banca"], entrada.get("ano"), entrada.get("concurso")
+    orgao = slugify(entrada.get("organ") or "")
+
+    def perto(anos) -> bool:
+        return ano is not None and any(abs(a - ano) <= 1 for a in anos if a)
+
+    achados = []
+    for c in catalogo:
+        if c.get("banca") != banca or not c.get("concurso"):
+            continue
+        mesmo_orgao = orgao and (c.get("organ_slug") == orgao
+                                 or c["concurso"].startswith(orgao + "_"))
+        if c["concurso"] == nome or (mesmo_orgao and perto({c.get("edital_ano")})):
+            achados.append(c["concurso"])
+    for m in manuais:
+        params = m.get("params") or {}
+        alvo = m.get("concurso") or params.get("concurso") or params.get("slug")
+        if m.get("banca") != banca or not alvo:
+            continue
+        if alvo == nome or (orgao and alvo.startswith(orgao + "_")
+                            and perto(_anos_no_nome(alvo))):
+            achados.append(f"{alvo} (manual)")
+    return sorted(set(achados))
+
+
 def carregar_inventario(destino_dir: Path = INVENTARIO_DIR) -> list[dict]:
     entradas = []
     for arq in sorted(Path(destino_dir).glob("*.jsonl")):
@@ -666,6 +709,10 @@ def main(argv=None) -> int:
         return 2
 
     pend = rev.pendentes(inventario, args.carreira)
+    acervo = [*rev.catalogo.dados["vigentes"], *rev.catalogo.dados["passados"].values()]
+    manual = Path(os.environ.get("LEXCORPUS_WATCHLIST", WATCHLIST_MANUAL_PADRAO))
+    manuais = ((yaml.safe_load(manual.read_text(encoding="utf-8")) or {}).get("alvos") or []
+               if manual.exists() else [])
     print(f"\n{args.carreira}: {len(pend)} pendente(s)")
     for banca in sorted({e["banca"] for e in pend}):
         print(f"  [{banca}] vagas no teto: {rev.vagas(args.carreira, banca)}")
@@ -680,6 +727,8 @@ def main(argv=None) -> int:
             marcas.append(f"ALERTA {e['alerta']}")
         if e["banca"] == "cebraspe" and not e.get("params"):
             marcas.append("SEM SLUG (--slug)")
+        if (iguais := ja_no_acervo(e, acervo, manuais)):
+            marcas.append(f"JÁ NO ACERVO? {', '.join(iguais)}")
         print(f"  {e['chave']:<28} {e['ano'] or '----'}  {e['organ'][:50]}"
               + (f"  [{'; '.join(marcas)}]" if marcas else ""))
     return 0

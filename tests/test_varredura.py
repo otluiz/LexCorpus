@@ -408,3 +408,38 @@ def test_confirmar_recusa_sem_provas(rev):
     e["sem_provas"] = True
     with pytest.raises(ValueError, match="sem prova"):
         rev().confirmar([e], "fiscal")
+
+
+# --- aviso de "já no acervo" ---------------------------------------------------
+
+_ACERVO = [
+    {"organ": "Sefaz-AL", "organ_slug": "sefaz_al", "concurso": "sefaz_al_19_auditor",
+     "edital_ano": 2019, "banca": "cebraspe", "carreira": "fiscal"},
+    {"organ": "SEEC-DF", "organ_slug": "seec_df", "concurso": "seec_auditor_19",
+     "edital_ano": 2019, "banca": "cebraspe", "carreira": "fiscal"},
+]
+_MANUAIS = [{"banca": "cebraspe", "spider": "cebraspe", "params": {"slug": "sefaz_ce_21"}},
+            {"banca": "cesgranrio", "spider": "cesgranrio",
+             "params": {"evento_id": "26", "concurso": "pc_ap_2026"}}]
+
+
+def _pci(organ, ano, concurso=None, banca="cebraspe"):
+    return {"banca": banca, "organ": organ, "ano": ano, "concurso": concurso}
+
+
+@pytest.mark.parametrize("entrada,esperado", [
+    (_pci("SEFAZ/AL", 2020), ["sefaz_al_19_auditor"]),       # ano da prova = edital + 1
+    (_pci("SEEC/DF", 2020), ["seec_auditor_19"]),            # órgão pelo organ_slug
+    (_pci("SEFAZ/CE", 2022, "sefaz_ce_21"), ["sefaz_ce_21 (manual)"]),
+    (_pci("SEFAZ/AL", 2025), []),                            # outro concurso do órgão
+    (_pci("SEFAZ/AL", 2020, banca="fgv"), []),               # outra banca
+    (_pci("PC/AP", 2026, banca="cesgranrio"), ["pc_ap_2026 (manual)"]),
+])
+def test_ja_no_acervo(entrada, esperado):
+    assert var.ja_no_acervo(entrada, _ACERVO, _MANUAIS) == esperado
+
+
+def test_anos_no_nome():
+    assert var._anos_no_nome("sefaz_al_19_auditor") == {2019}
+    assert var._anos_no_nome("tjgo2025") == set()       # colado ao nome: não arrisca
+    assert var._anos_no_nome("pc_ap_2026") == {2026}

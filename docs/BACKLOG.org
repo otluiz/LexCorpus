@@ -97,8 +97,9 @@
          o gpu01); a leva foi refeita por CLI: listagem FGV de 13/10 (344),
          mesmas 10 confirmações, 2/semana de 13/10 a 09/11. Watchlist
          manual incluso; FCC desativada
-   - [ ] Atualizar o gpu01: repetir o `git archive` + build + up (não há
-         git lá; o deploy não leva credencial do GitHub)
+   - [X] Atualizar o gpu01: `git archive` + build + up (não há git lá; o
+         deploy não leva credencial do GitHub). Feito em 13/10 com ce69a79
+         (filtro de objetivas + PyMuPDF na imagem)
    - [X] Fila do v2.1 no gpu01: o lexcorpus_consumer do LexLearn foi
          LIGADO em 13/10 (decisão do Administrador), como serviço
          (docker-compose.lexcorpus-consumer.yml, branch
@@ -130,8 +131,20 @@
          entre dezenas de cargos). Ano do PCI = ano da PROVA; o slug costuma
          levar o do edital (sonda os dois). Sem slug: --slug na revisão,
          conferido na API
-   - [ ] Revisão: avisar quando o concurso JÁ está no acervo/manual (ex.:
-         SEFAZ/AL 2020 = sefaz_al_19_auditor; SEEC/DF 2020 = seec_auditor_19)
+   - [X] Revisão: avisa quando o concurso parece JÁ estar no acervo ou no
+         watchlist manual (mesma banca, órgão pelo slug, ano a ±1): "JÁ NO
+         ACERVO? sefaz_al_19_auditor". Só avisa; o operador decide
+   - [ ] LEVA CEBRASPE no gpu01 (script pronto em 13/10, aguarda o dono do
+         produto rodar): fiscal sefaz_rj_25_auditor (--slug), pref_mossoro_rn_24,
+         sefaz_rr_21; tribunais trf6_24, cnj_24, stj_24, tst_23, tj_es_23 (o
+         teto). Descartados por já estarem no acervo: SEFAZ/AL 2020, SEEC/DF
+         2020. Libera de 16/11 a 07/12, depois dos 10 da FGV
+   - [ ] Pendentes de tribunais na Cebraspe, para quando o teto subir:
+         trt8_22; TJ/PA 2019 e TJ/AM 2019 (slugs tj_pa_19_servidor e
+         tj_am_19_servidor, achados na API em 13/10, usar --slug); TJ/RJ 2021
+         sem slug na API. SEFAZ/RJ 2025 tem também sefaz_rj_25_analista
+         (Analista em Finanças Públicas): uma entrada do inventário vira um
+         slug só
 ** FEITO [#A] ADR-0008: relação related (concurso-alvo)            :ALINHAR_LexPubli:
    ACEITO em 13/10, espelho do ADR-0004 do LexPubli. Mesma banca + mesma
    carreira, em outros órgãos; acervo primeiro (completed na hora).
