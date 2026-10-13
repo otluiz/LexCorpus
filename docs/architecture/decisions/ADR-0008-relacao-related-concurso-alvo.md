@@ -11,6 +11,11 @@
   Este ADR registra só o que muda no LexCorpus.
 - Estende: **ADR-0007** (consumidor do LexPubli e política de coleta).
 - Mantém: o contrato v2.1 com o LexLearn, que não muda.
+- **REVISÃO (2026-10-13, LexPubli ADR-0005):** a automação é só LexPubli ↔ LexCorpus. O
+  LexLearn não consome `contest.discovery.*` nem `document.*`; recebe as provas pelo v2.1,
+  como qualquer coleta, e a geração lá é por demanda, decidida pelo Administrador dele. A
+  automação LexPubli ↔ LexCorpus passa a usar o broker do LexPubli (URL separada aqui); o
+  broker do LexLearn fica só com o v2.1.
 
 ## Contexto
 
@@ -46,8 +51,8 @@ abriu. Hoje o consumidor (ADR-0007) só conhece `current` e `previous` (mesmo ó
 6. **Contratos (cópia em `schema/lexpubli/v1/`):** o LexCorpus atualiza a cópia **antes** de
    o LexPubli emitir `career`, `exam_date` e `contest.discovery.updated`. Os schemas usam
    `additionalProperties: false`, então até campo opcional novo seria recusado com a cópia
-   antiga. O LexCorpus só passa a emitir `relation: related` depois que o LexPubli e o
-   LexLearn aceitarem o valor.
+   antiga. O LexCorpus só passa a emitir `relation: related` depois que o LexPubli aceitar o
+   valor (o LexLearn não consome estes eventos).
 
 ## Consequências
 

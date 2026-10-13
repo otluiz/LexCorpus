@@ -11,3 +11,10 @@ O LexCorpus valida contra esta cópia:
 
 Isto não tem relação com o contrato v2.1 LexCorpus → LexLearn
 (`schema/evento.schema.json`, `docs/CONTRATO.md`), que continua igual.
+
+**Fronteira (LexPubli ADR-0005, LexCorpus ADR-0008):** a automação por eventos
+existe só entre LexPubli e LexCorpus. O LexLearn não consome estes eventos;
+o que chega a ele continua sendo só o v2.1 (`concurso.*`). Um concurso que o
+LexPubli aprova faz o LexCorpus coletar e alimentar o acervo do LexLearn, mas
+nunca dispara geração de questões lá: isso é por demanda, decidido pelo
+Administrador do LexLearn.

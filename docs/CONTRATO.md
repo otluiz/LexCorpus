@@ -29,6 +29,14 @@ O LexCorpus raspa **provas e gabaritos** de concursos públicos e os entrega por
 Padrão **Claim Check**: o binário nunca viaja dentro da mensagem. Os dois sistemas não se
 conhecem como código; a fila é um intermediário anônimo.
 
+> **Nota de fronteira (13/10/2026, sem mudança de versão):** este contrato é o **único
+> canal automático** que chega ao LexLearn. Os eventos LexPubli × LexCorpus
+> (`contest.discovery.*`, `document.acquisition.*`) ficam entre esses dois projetos; o
+> LexLearn não os assina. Uma coleta disparada por um concurso que o LexPubli descobriu
+> chega aqui como qualquer outra: alimenta o acervo e o DNA das bancas. A **geração de
+> questões** no LexLearn não é disparada por este contrato: é por demanda, decidida pelo
+> Administrador do LexLearn.
+
 ---
 
 ## 2. Onde escrever — pasta PLANA por concurso
