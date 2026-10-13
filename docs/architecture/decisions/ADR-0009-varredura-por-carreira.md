@@ -5,7 +5,7 @@
 
 # ADR-0009: Varredura por carreira (inventário por banca, coleta com teto)
 
-- Status: **Proposto**
+- Status: **Aceito** em 2026-10-13 pelo dono do produto.
 - Data: 2026-10-13
 - Autor: Prof. Othon Luiz
 - Estende: **ADR-0008** (relação `related`; este ADR é a "fonte 2", a descoberta)

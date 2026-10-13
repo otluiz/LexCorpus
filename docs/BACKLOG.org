@@ -60,10 +60,10 @@
 
 * Em andamento / próximos
 ** TODO [#A] ADR-0009: varredura por carreira (fonte 2 do related)
-   PROPOSTO em 13/10. Decidido pelo dono do produto: começar por fiscal e
+   ACEITO em 13/10. Decidido pelo dono do produto: começar por fiscal e
    tribunais, até 5 concursos por carreira e banca. A carreira é o eixo da
    BUSCA; a coleta continua nos spiders de banca.
-   - [ ] Aceite do ADR
+   - [X] Aceite do ADR (13/10)
    - [ ] carreiras_regras.yaml + sugestão (nunca grava sozinha)
    - [ ] inventariar: FGV e Cesgranrio (listagens oficiais)
    - [ ] inventariar: Cebraspe (índice PCI + confirmação na API por slug;
