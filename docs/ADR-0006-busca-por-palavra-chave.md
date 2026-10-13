@@ -13,6 +13,15 @@
 > aponta para ele. O mecanismo de esqueleto + rota Playwright permanece
 > para bancas futuras com WAF. O restante do ADR segue vigente.
 
+> **REVISÃO (12/10/2026, ADR-0007):** a regra "a promoção é sempre decisão
+> do operador" (Decisão §2) foi revisada. Concursos aprovados na curadoria
+> do LexPubli chegam por evento (`contest.discovery.created`), e uma
+> **política versionada** (bancas validadas, limiares do buscador, limite
+> de certames anteriores) promove sozinha os casos de rotina. O operador
+> passa a definir a política e continua decidindo as exceções. Os comandos
+> manuais deste ADR seguem valendo sem mudança. Ver
+> `docs/architecture/decisions/ADR-0007-consumidor-lexpubli-e-politica-de-coleta.md`.
+
 ## Contexto
 
 O LexCorpus já é funcional para **baixar** provas de bancas conhecidas
