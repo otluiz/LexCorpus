@@ -59,6 +59,17 @@
     cache. Política de expurgo, se um dia existir, será objeto de estudo.
 
 * Em andamento / próximos
+** TODO [#A] ADR-0008: relação related (concurso-alvo)            :ALINHAR_LexPubli:
+   ACEITO em 13/10, espelho do ADR-0004 do LexPubli. Mesma banca + mesma
+   carreira, em outros órgãos; acervo primeiro (completed na hora).
+   - [ ] Atualizar a cópia schema/lexpubli/v1/ para a v1.1 (career,
+         exam_date, contest.discovery.updated) ANTES de o LexPubli emitir
+   - [ ] Campo carreira no catálogo; marcar o acervo existente (fiscal:
+         sefaz_ce_21, sefaz_al_19_auditor, seec_auditor_19, sefaz_al_19)
+   - [ ] Consumidor: related a partir do acervo; politica_coleta.yaml
+         ganha a seção relacionados (mesma banca, máx. 5)
+   - [ ] Consumir contest.discovery.updated (carreira/banca tardias)
+   - [ ] Emitir relation=related só depois que LexPubli e LexLearn aceitarem
 ** EM-ANDAMENTO [#A] ADR-0007: consumidor do LexPubli + política de coleta  :ALINHAR_LexPubli:
    ACEITO em 12/10, junto com o ADR-0002 do LexPubli (espelho). Revisa a
    regra "promoção sempre manual" do ADR-0006: o operador define a POLÍTICA
