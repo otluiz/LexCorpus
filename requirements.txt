@@ -2,4 +2,7 @@ scrapy>=2.17,<3
 pika>=1.3          # publisher RabbitMQ (produção)
 jsonschema>=4.20   # validação dos schemas em testes
 itemadapter>=0.8
+croniter>=6        # scheduler: vencimento dos alvos por cron (watchlist)
+PyYAML>=6          # watchlist.yaml / catalogo.yaml
 # scrapy-playwright>=0.0.40   # descomente quando precisar de banca com JS
+PyMuPDF>=1.23      # varredura: ano do concurso pela 1ª página de um PDF oficial (última instância; o mesmo leitor do LexLearn; licença AGPL)

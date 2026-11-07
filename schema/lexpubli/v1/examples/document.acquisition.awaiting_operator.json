@@ -1,0 +1,19 @@
+{
+  "event_id": "01a1330a-2d3c-7e4f-9a51-6b7c8d9e0f1a",
+  "event_type": "document.acquisition.awaiting_operator",
+  "event_version": "1.0",
+  "occurred_at": "2026-10-13T09:15:03.007Z",
+  "producer": "lexcorpus/consumidor",
+  "correlation_id": "01a132f0-d60d-71bc-bfbc-021403fdbc57",
+  "data": {
+    "contest_id": "01a132f0-8537-7fdb-bd15-c39aa6c10f7e",
+    "relation": "previous",
+    "reason": "below_threshold",
+    "exam_board": null,
+    "detail": "O buscador achou 2 candidatas, nenhuma confirmada no catálogo do órgão.",
+    "candidates": [
+      { "exam_board_slug": "fcc", "year": 2013, "score": 0.42, "confirmed_by_organ_catalog": false },
+      { "exam_board_slug": "cespe", "year": 2002, "score": 0.31, "confirmed_by_organ_catalog": false }
+    ]
+  }
+}

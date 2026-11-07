@@ -26,8 +26,10 @@ Regras:
      spiders/exemplo_banca.py + URL da fonte primária descoberta, e avisa
      o operador (a validação do esqueleto é manual — coerente com o
      watchlist, onde alvos novos nascem com ativo=false).
-  4. Cesgranrio segue BLOQUEADA (WAF) — o orquestrador sinaliza a rota
-     Playwright (spider gerado já carrega o custom_settings certo).
+  4. Banca com bloqueio conhecido (WAF etc., campo "bloqueio" na tabela)?
+     o orquestrador sinaliza a rota Playwright (spider gerado já carrega
+     o custom_settings certo). Nenhuma banca ativa está bloqueada hoje —
+     a Cesgranrio foi desbloqueada em 18/08 via API JSON pública.
 
 Modos de disparo (parametrizáveis):
   - `comando` (default): imprime o `scrapy crawl ...` exato para o operador
@@ -57,11 +59,10 @@ SPIDERS_POR_BANCA = {
         "bloqueio": None,
     },
     "cesgranrio": {
-        "spider": None,                      # BLOQUEADA — WAF Azure Front Door
-        "params": {"slug": None},
-        "fonte_primaria": "https://www.cesgranrio.org.br/concurso/{slug}/",
-        "bloqueio": "WAF Azure Front Door (403); requer imagem Playwright "
-                    "(docker stage playwright) + scrapy-playwright",
+        "spider": "cesgranrio",              # API pública do portal (18/08)
+        "params": {"evento_id": None},       # sai de /api/PortalEventos
+        "fonte_primaria": "https://concursos.cesgranrio.org.br/api/PortalEventos/{evento_id}",
+        "bloqueio": None,
     },
     "fgv": {
         "spider": "fgv",
@@ -238,7 +239,9 @@ def montar_comando(banca_slug: str, concurso: str, *, organ: str = "",
     Honra a assinatura do spider: os parâmetros do spider existente são
     descobertos em SPIDERS_POR_BANCA["params"] ("slug": None = obrigatório;
     "url": None = obrigatório). URL só entra se o spider aceita `url`.
-    Extra_params sobrepõem (override explícito do operador).
+    Params fora de url/slug/banca/cargo (ex.: evento_id) vão direto quando
+    têm valor; obrigatórios sem valor viram placeholder <PREENCHER>.
+    Extra_params sobrepõe (override explícito do operador).
     """
     cfg = mapear_spider(banca_slug) or {"spider": spider_nome, "params": {}}
     spider = spider_nome or cfg.get("spider")
@@ -259,6 +262,13 @@ def montar_comando(banca_slug: str, concurso: str, *, organ: str = "",
         pares.append(f'banca="{organ}"')
     if "cargo" in params and cargo:
         pares.append(f'cargo="{cargo}"')
+    # demais params da assinatura do spider (ex.: evento_id da Cesgranrio):
+    # valor preenchido vai direto; None = obrigatório, vira placeholder
+    for nome, valor in params.items():
+        if nome in ("url", "slug", "banca", "cargo"):
+            continue
+        pares.append(f'{nome}="{valor}"' if valor is not None
+                     else f"{nome}=<PREENCHER>")
     pares = [x for x in pares if x]
     return f"scrapy crawl {spider} " + " ".join(pares)
 
@@ -389,6 +399,9 @@ def main():
         cargo=cargos[0] if cargos else "", url=url,
     )
     print(f"\nCOMANDO (pronto para colar):\n  {cmd}")
+    if "<PREENCHER>" in cmd:
+        print("ATENÇÃO: substitua os <PREENCHER> pelos valores reais "
+              "(ex.: evento_id sai de /api/PortalEventos da Cesgranrio).")
 
     if args.modo == "executar":
         if bloqueado:

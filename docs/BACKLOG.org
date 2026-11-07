@@ -49,71 +49,206 @@
     "Migrar pci.py e fcc.py para heuristics.py".
   - DOCS: os .md migram para docs/; na raiz fica só o README.md.
     Este backlog vive em docs/BACKLOG.org.
+  - PROVA NÃO EXPIRA (18/08): FILES_EXPIRES passou de 90 para 700 dias E,
+    mais importante, o FilesPipeline ganhou GATE ADMINISTRATIVO
+    (_onsuccess em pipelines.py): arquivo "expirado" NÃO é rebaixado/
+    sobrescrito automaticamente — o crawl mantém o arquivo e loga WARNING
+    pedindo decisão do administrador, que autoriza com
+    -s LEXCORPUS_REBAIXAR_EXPIRADOS=True. Os arquivos são o acervo do
+    LexLearn (DNA das bancas); substituição nunca é efeito colateral de
+    cache. Política de expurgo, se um dia existir, será objeto de estudo.
 
 * Em andamento / próximos
-** EM-ANDAMENTO [#A] Spider FGV (conhecimento.fgv.br)
-   Site Drupal, HTML estático, SEM captcha (verificado 05/08). Página do
-   concurso: /concursos/{slug} (ex.: dataprev26). PDFs servidos de
-   /sites/default/files/concursos/*.pdf, nomes descritivos. Quando a
-   prova é aplicada surge a seção "Provas e Gabaritos" na própria página.
-   - [X] Copiar spiders/exemplo_banca.py → spiders/fgv.py
-   - [ ] Listagem /concursos extrai os slugs disponíveis
-   - [X] Filtrar PDFs pelo path /concursos/ (rodapé tem termos de uso e
-         aviso de cookies que NÃO são do concurso)
-   - [X] Ignorar "Vista de Prova" (espelho do candidato, exige CPF)
-   - [ ] Classificação de papel: hoje (08/08) o fgv.py usa cópias LOCAIS
-         de regex (_RE_GAB_*, eh_relevante) — mais estritas e CORRETAS
-         para o padrão FGV ("Gabarito Oficial Preliminar"). Migrar para
-         heuristics.py (ADR-0004) DEPOIS de corrigir o bug do "oficial"
-         no módulo (ver item em Pipeline/correções), promovendo as
-         regex do FGV a parâmetros nomeados
-   - [ ] Montar o item via make_item da base fina (hoje o fgv.py monta
-         o ArquivoItem na mão)
-   - [ ] Teste de parse com fixture (modelo: tests/test_pci_parse.py)
-   Notas: aceita -a url= para páginas fora de /concursos/ (o cpnu2 vive
-   na raiz do site); CNU 2025 ensaiado (eventos_debug/cnu_2025.json);
-   nomes opacos (b1101.pdf) viram nomes semânticos {concurso}_{bloco}_
-   tipo_{n}.pdf. Quick win: HTTP puro, sem browser.
-
-** TODO [#A] Watchlist YAML + scheduler (a automação)
-   Hoje o crawl depende de `scrapy crawl X -a ...` na mão. Substituir
-   por uma lista de alvos versionada no repo (watchlist.yaml, já há um
-   esqueleto inicial) + um scheduler que dispara os crawls vencidos.
-   É isto que transforma "rodar na mão" em "rodar sozinho". Continua
-   monolito: o scheduler é um módulo do projeto, não um serviço novo.
-   - [ ] lexcorpus/scheduler.py: lê watchlist.yaml, calcula alvos vencidos
-         pelo cron de cada um, dispara CrawlerProcess (sequencial por
-         banca; bancas distintas podem sobrepor)
-   - [ ] Campos do alvo: banca, spider, params, cron, ativo (false =
-         spider ainda não existe / pausado)
-   - [ ] Seção "descoberta": spiders de listagem rodam 1x/dia e PROPÕEM
-         novos alvos (saída em log/arquivo; promoção ao watchlist é
-         manual por enquanto)
-   - [ ] Começar com loop simples (schedule/APScheduler); supercronic é
-         alternativa se preferir cron puro no container
-   - [ ] Registrar último disparo por alvo (no StateStore, ver item abaixo)
-
-** TODO [#A] StateStore + ciclo preliminar→definitivo (contrato §6.11)
+** TODO [#A] ADR-0009: varredura por carreira (fonte 2 do related)
+   ACEITO em 13/10. Decidido pelo dono do produto: começar por fiscal e
+   tribunais, até 5 concursos por carreira e banca. A carreira é o eixo da
+   BUSCA; a coleta continua nos spiders de banca.
+   - [X] Aceite do ADR (13/10)
+   - [X] carreiras_regras.yaml + sugestão (nunca grava sozinha); exceções:
+         Tribunal de Contas (controle), juiz/magistratura (jurídica),
+         notarial/registral, auditor fiscal do trabalho
+   - [X] inventariar: FGV e Cesgranrio (listagens oficiais). Medido em
+         13/10: FGV 339 concursos (listagem de 19/08; rodar de novo
+         `scrapy crawl fgv -a descoberta=1`), 10 fiscais e 58 tribunais
+         sugeridos; Cesgranrio: o PortalEventos tem só 15 eventos, de 2023
+         em diante, nenhum fiscal ou de tribunais
+   - [X] revisar em lote (teto por carreira e banca; lote recusado
+         inteiro se passar do teto ou faltar o ano) + descartados
+   - [X] política varredura + watchlist.varredura.yaml + scheduler (o
+         manual é soberano); Dockerfile: LEXCORPUS_WATCHLIST_VARREDURA
+   - [X] PRIMEIRA LEVA confirmada em 13/10 (estado do notebook, volume
+         lexcorpus_lexcorpus-state): fiscal seappr25, sefazmt23, rfb22,
+         saebba22, sefazam22; tribunais tjscservidor26, tjce25, tjgo2025,
+         tjpr25, tjrjservidores25
+   - [X] Liberação escalonada (novos_por_semana: 1): a_partir_de de
+         13/10 a 14/12; o scheduler não dispara antes. Corrige o disparo
+         do lote inteiro na primeira passada
+   - [X] novos_por_semana: 2 (13/10); `agenda --reescalonar` refaz a escala
+         dos ainda não liberados
+   - [X] Serviço `scheduler` no compose (loop de 10 min, crawls no mesmo
+         container); RABBIT_URL do .env (LEXCORPUS_RABBIT_URL): o broker do
+         gpu01 não aceita guest:guest
+   - [X] NO AR no gpu01 em 13/10 (dono do produto: o notebook não fica
+         ligado). ~/LexCorpus por `git archive` da branch
+         feature/consumidor-lexpubli (commit em ~/LexCorpus/.deploy-commit);
+         .env lá (chmod 600) com LEXCORPUS_STORAGE_DIR=~/LexLearn-v3/data e
+         LEXCORPUS_RABBIT_URL do .env do LexLearn; serviço `scheduler` com
+         restart unless-stopped. Estado NOVO lá (o do notebook não descreve
+         o gpu01); a leva foi refeita por CLI: listagem FGV de 13/10 (344),
+         mesmas 10 confirmações, 2/semana de 13/10 a 09/11. Watchlist
+         manual incluso; FCC desativada
+   - [X] Atualizar o gpu01: `git archive` + build + up (não há git lá; o
+         deploy não leva credencial do GitHub). Feito em 13/10 com ce69a79
+         (filtro de objetivas + PyMuPDF na imagem)
+   - [X] Fila do v2.1 no gpu01: o lexcorpus_consumer do LexLearn foi
+         LIGADO em 13/10 (decisão do Administrador), como serviço
+         (docker-compose.lexcorpus-consumer.yml, branch
+         ops/lexcorpus-consumer do LexLearn). Fila lexlearn.lexcorpus.ingest
+         + DLQ, ligada a concurso.#, 1 consumidor. Os 9 avisos do 1º ciclo
+         (antes da fila) se perderam; voltam quando cada concurso tiver
+         novidade
+   - [ ] Na revisão: PSS (temporários) e juiz cujo rótulo não diz "juiz"
+         (ex.: tjmsjuiz25)
+   - [X] FGV sem ano no slug (13/10): página oficial + edital. Medido em
+         68 sugeridos: 53 com ano no slug, 10 pela página, 4 pelo edital
+         (tjba 2014, tjpi 2015, trf1 2024, trf6 2025), 1 sem ano (tjrj, que
+         nem tem provas). A página sozinha erra em concurso que atravessa
+         anos (trf6: 2026 = publicação; edital 2025). Pasta ganha o ano
+         (-a concurso=). Alerta de outra carreira pelos PDFs; "sem provas"
+         bloqueia a confirmação. --ano na revisão. PyMuPDF no requirements
+         (o mesmo leitor do LexLearn; licença AGPL)
+   - [ ] Alerta de juiz é ruidoso nas páginas de TJ da FGV (a FGV junta
+         documentos de juiz e de servidor): 25 de 68. Refinar se atrapalhar
+   - [ ] tjrjservidores25 (1ª leva, libera 09/11) está "sem provas" na
+         página hoje: o alvo roda e não traz nada até a FGV publicar
+   - [ ] trf6 é concurso de JUIZ (o edital diz); sai de tribunais quando
+         a carreira jurídica entrar na varredura
+   - [X] inventariar: Cebraspe (13/10). Índice PCI /provas/cebraspe (32
+         páginas, 1.600 provas, 149 concursos de 2017 a 2025; robots.txt
+         permite /provas/) + confirmação na API por slug. Medido: 5 fiscais
+         e 9 de tribunais sugeridos, 8 confirmados na API. Sugestão por
+         "órgão ou maioria dos cargos" (cortou prefeituras com 1 auditor
+         entre dezenas de cargos). Ano do PCI = ano da PROVA; o slug costuma
+         levar o do edital (sonda os dois). Sem slug: --slug na revisão,
+         conferido na API
+   - [X] Revisão: avisa quando o concurso parece JÁ estar no acervo ou no
+         watchlist manual (mesma banca, órgão pelo slug, ano a ±1): "JÁ NO
+         ACERVO? sefaz_al_19_auditor". Só avisa; o operador decide
+   - [ ] LEVA CEBRASPE no gpu01 (script pronto em 13/10, aguarda o dono do
+         produto rodar): fiscal sefaz_rj_25_auditor (--slug), pref_mossoro_rn_24,
+         sefaz_rr_21; tribunais trf6_24, cnj_24, stj_24, tst_23, tj_es_23 (o
+         teto). Descartados por já estarem no acervo: SEFAZ/AL 2020, SEEC/DF
+         2020. Libera de 16/11 a 07/12, depois dos 10 da FGV
+   - [ ] Pendentes de tribunais na Cebraspe, para quando o teto subir:
+         trt8_22; TJ/PA 2019 e TJ/AM 2019 (slugs tj_pa_19_servidor e
+         tj_am_19_servidor, achados na API em 13/10, usar --slug); TJ/RJ 2021
+         sem slug na API. SEFAZ/RJ 2025 tem também sefaz_rj_25_analista
+         (Analista em Finanças Públicas): uma entrada do inventário vira um
+         slug só
+** FEITO [#A] ADR-0008: relação related (concurso-alvo)            :ALINHAR_LexPubli:
+   ACEITO em 13/10, espelho do ADR-0004 do LexPubli. Mesma banca + mesma
+   carreira, em outros órgãos; acervo primeiro (completed na hora).
+   CLOSED: 2026-10-13 (Fase 1 do LexPubli ADR-0004)
+   - [X] Cópia schema/lexpubli/v1/ na v1.1 (career, exam_date,
+         contest.discovery.updated, related) ANTES de o LexPubli emitir
+   - [X] Campo carreira no catálogo (lista do contrato) + CLI `carreira`;
+         acervo fiscal marcado no catalogo.yaml: sefaz_ce_21,
+         sefaz_al_19_auditor, seec_auditor_19 (o "sefaz_al_19" listado
+         antes não existe no acervo)
+   - [X] Consumidor: acervo -> previous (mesmo órgão) / related (outro
+         órgão, máx. 5); politica_coleta.yaml seção relacionados
+   - [X] Consumir contest.discovery.updated; resposta só na 1ª ligação
+   - [X] Catálogo de estado semeado do versionado; CLI respeita
+         LEXCORPUS_CATALOGO
+   - [X] Aceite em teste: Sefaz-AL 2026 recebe o acervo fiscal sem coleta
+   - [ ] Marcar o resto do acervo (prf_21, bacen13_analista,
+         serpro13_analista_ti...) — decisão do operador
+   - [ ] Fonte 2 do related (descoberta: inventários e buscador) — depois
+** FEITO [#A] Broker do LexPubli separado do v2.1 (LexPubli ADR-0005 §2a) :ALINHAR_LexPubli:
+   A automação LexPubli ↔ LexCorpus sai do broker do LexLearn. Hoje uma
+   RABBIT_URL servia o v2.1, o consumidor e as respostas document.*.
+   CLOSED: 2026-10-13
+   - [X] LEXPUBLI_RABBIT_URL para o consumidor e o Respondedor, inclusive o
+         _responder_lexpubli do pipeline (conexão própria, aberta só se há
+         resposta); sem fallback para RABBIT_URL
+   - [X] RABBIT_URL (LexLearn) fica só com concurso.*
+   - [X] Overlay docker-compose.lexpubli.yml (rede lexpubli-broker, host
+         lexpubli-rabbitmq); o consumidor NÃO entra na rede do LexLearn
+   - [X] DLX próprio (lexcorpus.lexpubli.dlx): o usuário lexcorpus não tem
+         escrita em amq.default
+   - [X] Testes (150) e E2E: aprovação no LexPubli → consumidor → resposta
+         validada, com correlation_id, no broker do LexPubli
+** EM-ANDAMENTO [#A] ADR-0007: consumidor do LexPubli + política de coleta  :ALINHAR_LexPubli:
+   ACEITO em 12/10, junto com o ADR-0002 do LexPubli (espelho). Revisa a
+   regra "promoção sempre manual" do ADR-0006: o operador define a POLÍTICA
+   (bancas validadas, limiares do buscador, limite de N certames
+   anteriores) e a política decide os casos de rotina.
+   Branch: feature/consumidor-lexpubli.
+   - [X] Aceite do ADR (dono do produto, 12/10)
+   - [X] lexcorpus/consumidor.py: fila lexcorpus.lexpubli.contests ligada a
+         lexpubli.events (contest.discovery.*), idempotência pelo event_id
+         (StateStore), dead-letter
+   - [X] Catálogo: upsert por contest_slug, guardando o contest_id
+   - [X] Política versionada: politica_coleta.yaml
+   - [X] Watchlist automático em arquivo separado; o scheduler junta os dois
+         e o manual é soberano
+   - [X] Emitir document.acquisition.* no envelope v1 (respostas.py); o
+         completed sai do EventoRabbitPipeline (aquisicao_lexpubli)
+   - [X] Serviço "consumidor" no docker-compose (sem montar /data)
+   - [X] 23 testes (tests/test_consumidor.py)
+   - [X] E2E real em 12/10 (notebook, broker do LexPubli): aprovação no
+         LexPubli → consumidor → watchlist automático → scheduler → crawl
+         Cebraspe sefaz_ce_21 (17 PDFs) → concurso.disponivel (válido no
+         v2.1, sem campo novo) + document.acquisition.completed (válido no
+         contrato v1 do LexPubli, correlation_id = event_id da aprovação)
+   - [ ] Revisar o ROBOTSTXT_OBEY=False da FCC (regra comum: respeitar
+         13/10: o alvo manual sface125 foi DESATIVADO (a coleta vai rodar
+         sozinha no gpu01). Caminhos: autorização da FCC; gabarito pela
+         republicação oficial do órgão (DOE-CE); ou coleta manual pontual.
+         robots). Até lá a FCC fica FORA de bancas_validadas
+   - [ ] Conferir o SPIDERS_POR_BANCA: fcc ainda usa params "codigo", mas o
+         spider e o watchlist usam "slug"
+   - [ ] Catálogo: o consumidor escreve em LEXCORPUS_CATALOGO (/state no
+         Docker), e o catalogo.yaml do repositório é a semente versionada.
+         Decidir se o versionado é exportado do estado ou vice-versa
+   - [ ] completed.source_url: hoje é o fonte_url do concurso (o último PDF);
+         preferir a página/API oficial do concurso
+   - [X] Contagem "prova" incluía padrão de resposta: o discursivo agora
+         fica fora da coleta e da contagem
+   - [ ] Buscador real no E2E (o teste usou --sem-buscador, para não depender
+         do motor de busca)
+** FEITO [#A] StateStore + ciclo preliminar→definitivo (contrato §6.11)
+   CLOSED: 2026-08-31
    O contrato modela o ciclo (vigente, substituido_por, concurso.
    atualizado) mas NADA disso está implementado: hoje toda coleta publica
    concurso.disponivel com vigente=true, e a routing key
-   RABBIT_ROUTING_ATUALIZADO existe no settings sem uso. O FILES_EXPIRES=90
-   evita re-download, mas não sabe dizer "o definitivo chegou".
+   RABBIT_ROUTING_ATUALIZADO existe no settings sem uso. O cache de
+   download dura 700 dias e, mesmo vencido, o pipeline segura o arquivo
+   para decisão do administrador (gate 18/08) — mas nada sabe dizer "o
+   definitivo chegou".
    Solução: SQLite pequeno no volume de estado.
-   - [ ] Tabela arquivo_visto(banca, concurso, nome, papel, checksum,
-         vigente, first_seen, last_seen)
-   - [ ] EventoRabbitPipeline consulta o estado antes de agregar:
+   - [X] Tabela arquivo_visto(banca, concurso, nome, papel, checksum,
+         vigente, first_seen, last_seen) — FEITO 31/08:
+         lexcorpus/statestore.py (WAL + busy_timeout para os crawls
+         paralelos do scheduler; caminho via LEXCORPUS_STATE_DB)
+   - [X] EventoRabbitPipeline consulta o estado antes de agregar:
          concurso/arquivos novos → concurso.disponivel (como hoje);
          surgiu gabarito_definitivo onde havia preliminar → marca o
          preliminar vigente=false + substituido_por e publica o conjunto
-         como concurso.atualizado; nada mudou → não publica nada
-   - [ ] Idempotência de verdade do lado produtor (não depender só do
-         event_id no consumidor)
-   - [ ] Re-run diário fica barato e seguro (só publica delta)
+         como concurso.atualizado; nada mudou → não publica nada.
+         FEITO 31/08: diff em _fechar_concurso (pipelines.py); matching
+         preliminar↔definitivo por interseção de cargos ("*" cobre tudo)
+         + tipo_prova; sidecar do preliminar regravado (só metadado)
+   - [X] Idempotência de verdade do lado produtor (não depender só do
+         event_id no consumidor) — "nada mudou → não publica nada"
+   - [X] Re-run diário fica barato e seguro (só publica delta)
    - ALINHAR com o LexLearn: a semântica do concurso.atualizado está no
      contrato; validar o primeiro evento real com um consumidor de teste
+     → segue ABERTO no item §9 "Validar o primeiro concurso.atualizado real"
    - Fecha o ponto aberto "Ciclo preliminar → definitivo" do
      docs/COMUNICADO_INTEGRACAO_OK.md
+   Testes: tests/test_statestore.py (5 casos, sem rede/RabbitMQ; eventos
+   validados contra o schema). 88 testes verdes em 31/08.
 
 ** TODO [#B] Migrar pci.py e fcc.py para heuristics.py (ADR-0005)
    Plano formalizado no ADR-0005 (09/08): ordem, pré-requisitos
@@ -192,20 +327,12 @@
    - [ ] PCI /provas/ + /provas/{cargo} (sem captcha — verificado 05/08):
          o agregador mais rico; descobre concursos de TODAS as bancas.
          Candidato a rodar via agregador_generico parametrizado (07/08)
-   - [ ] FGV /concursos (slugs ativos)
+   - [X] FGV /concursos (slugs ativos) — FEITO 18/08 via modo descoberta
+         do próprio spider fgv (-a descoberta=1 → eventos_debug/descoberta/
+         fgv.jsonl, 339 slugs em 13 páginas)
    - [ ] FCC raiz do concursosfcc.com.br
    - [ ] Saída: JSONL em eventos_debug/descoberta/ (ou fila própria depois)
    - É o uso correto do PCI: índice, não fonte de arquivo (ver ADR-0001)
-
-** BLOQUEADO Spider Cesgranrio — WAF (Azure Front Door)
-   cesgranrio.org.br retorna 403 para qualquer cliente não-navegador,
-   mesmo com headers completos de browser (verificado 05/08 — o bloqueio
-   é do Azure Front Door, aparentemente por fingerprint/reputação de IP).
-   - Depende de: imagem variante com Playwright (item Docker) +
-     scrapy-playwright com contexto persistente
-   - Se o WAF barrar IP de datacenter mesmo com browser real: proxy
-     residencial ou aceitar Cesgranrio como cobertura parcial
-   - Não começar antes de FGV estar no ar (quick wins primeiro)
 
 ** BLOQUEADO PCI como fonte de PDFs (Turnstile + robots.txt)
    Página de download tem ZERO links .pdf: os arquivos ficam atrás de um
@@ -230,29 +357,37 @@
      `scrapy crawl pci` sem resultado = este bloqueio em ação.
 
 * Pipeline / correções
-** EM-ANDAMENTO [#A] Config de ambiente: USER_AGENT real e RABBIT_URL por env
+** FEITO [#A] Config de ambiente: USER_AGENT real e RABBIT_URL por env
+   CLOSED: 2026-08-31
    Profissionalização básica antes de rodar automático contra as bancas.
-   - [ ] USER_AGENT hoje é "lexcorpus/0.1 (+contato@exemplo.br)" —
+   - [X] USER_AGENT hoje é "lexcorpus/0.1 (+contato@exemplo.br)" —
          placeholder. Colocar contato real (boa-fé com os sites + exigido
-         por vários ToS)
+         por vários ToS). FEITO 31/08: contato real (olto@ecomp.poli.br,
+         e-mail do autor no git config) em settings.py
    - [X] RABBIT_URL hardcoded amqp://guest:guest@localhost → ler de env
          (padrão FILES_STORE que já usa os.environ). FEITO 05/08 junto
          com RABBIT_ENABLED: settings.py lê os.environ.get para ambos;
          default local inalterado (False / localhost)
-   - [ ] Credenciais de produção fora do repo (.env + .env.example)
+   - [X] Credenciais de produção fora do repo (.env + .env.example)
+         FEITO 30/08: .env.example na raiz (template comentado; exceção
+         !.env.example no .gitignore) + seção "Configuração por ambiente"
+         no README. EVENTOS_OUT_DIR passou a ler de env também.
 
-** TODO [#A] BUG: "Gabarito Oficial Preliminar" vira gabarito_definitivo
+** FEITO [#A] BUG: "Gabarito Oficial Preliminar" vira gabarito_definitivo
+   CLOSED: 2026-08-13
    Reproduzido em 09/08: RE_GAB_DEF inclui "oficial" como qualificador
    de definitivo, então "Gabarito Oficial Preliminar" (rótulo padrão da
    FGV) casa RE_GAB_DEF antes de RE_GAB_PRE. Afeta heuristics.py →
    base.py delega nela (desde 09/08), então estrategia.py e
    agregador_generico.py herdam o erro. fgv.py NÃO é afetado (regex
    locais estritas: gabarito\s+oficial\s+definitiv / \s+preliminar).
-   - [ ] Corrigir a precedência EM heuristics.py (cópia única desde o
+   - [X] Corrigir a precedência EM heuristics.py (cópia única desde o
          alinhamento da base): checar RE_GAB_PRE ANTES de RE_GAB_DEF,
          ou remover "oficial" dos qualificadores de definitivo (um
          gabarito "oficial" pode ser preliminar OU definitivo)
-   - [ ] Casos de teste: "Gabarito Oficial Preliminar" → preliminar;
+         FEITO 13/08: as duas proteções foram aplicadas — RE_GAB_PRE
+         roda antes de RE_GAB_DEF e "oficial" saiu de RE_GAB_DEF.
+   - [X] Casos de teste: "Gabarito Oficial Preliminar" → preliminar;
          "Gabarito Oficial Definitivo" → definitivo; "Gabarito" (sem
          qualificador) → definitivo (regra vigente)
 
@@ -288,23 +423,56 @@
    - [ ] Não inventar: se não der para extrair, omite (contrato §5, caso C)
    - Não bloqueia nada; refinamento contínuo
 
-** TODO [#C] "Padrão de resposta" da discursiva hoje vira papel=prova
-   Registrado no comunicado como comportamento conhecido. O LexLearn tem
-   autoridade para reclassificar. Revisitar só se virar ruído real.
+** FEITO [#B] Material discursivo fora da coleta (padrão de resposta, discursiva, justificativa)
+   CLOSED: 2026-10-13
+   Virou ruído real no gpu01 (SEEC_AUDITOR_19_PADRO_DE_RESPOSTA... chegou
+   ao LexLearn como prova). Decisão do dono do produto: o LexLearn só trata
+   objetivas (C/E na Cebraspe, A-E nas outras) e casa cada prova com o seu
+   gabarito; discursivo é DESCARTADO. Nada de papel novo no contrato (a
+   tentativa v2.2 foi desfeita antes do push).
+   - [X] heuristics.eh_discursivo (nomes reais: PADRAORESPOSTA,
+         PADRO_DE_RESPOSTA, _DISC.PDF; JUSTIFICATIVA); "objetiva e
+         discursiva" no mesmo PDF fica
+   - [X] Spider Cebraspe e heurística comum devolvem None
+   - [X] FiltroObjetivasPipeline (prioridade 50) ANTES do download, para
+         todas as bancas
+   - [X] Estado: o discursivo coletado antes não é relistado nem contado
+   - [X] CONTRATO.md §6 regra 12 (sem mudança de schema)
+   - [X] gpu01 (13/10): os 20 PDFs discursivos já entregues, com os
+         sidecars, foram MOVIDOS para raw/descartados/discursivo/{banca}/
+         {concurso}/ (LEIAME.txt com a origem). Os 2 da PRF já estavam
+         ingeridos: documents 51 e 52 tiveram o source_path corrigido no
+         mesmo passo
+   - [X] Deploy do 27cae7b no gpu01 (13/10): filtro de objetivas ativo no
+         scheduler
+   - [ ] Destino final dos descartados e das linhas 51/52 (ainda
+         document_type=exam, logical_type=prova; os .txt seguem em
+         processed/exams/cebraspe/prf_21/) — decisão do Administrador
 
 * Docker / profissionalização
-** TODO [#A] Dockerfile multi-stage (base + base-playwright)
+** FEITO [#A] Dockerfile multi-stage (base + base-playwright)
+   CLOSED: 2026-08-31
    UMA imagem para todo o projeto; um segundo target adiciona Chromium+
    Playwright só para os spiders que precisam (Cesgranrio; PCI se um dia
    for reaberto). Imagem principal fica enxuta.
+   NOTA 18/08: a Cesgranrio foi desbloqueada SEM Playwright (API JSON
+   pública — ver item FEITO no histórico). Hoje NENHUM spider ativo
+   precisa de browser; o stage playwright fica só para o PCI, se reaberto.
    - [X] Stage base (versão inicial 05/08): python:3.11-slim +
          requirements.txt + código, ENTRYPOINT scrapy, .dockerignore
-         excluindo venv/.git/eventos_debug
-   - [ ] Stage playwright: base + playwright install --with-deps chromium
+         excluindo venv/.git/eventos_debug. NOTA 31/08: o .dockerignore
+         não existia de fato no repo — criado agora (.git, venv,
+         eventos_debug, state, tmp, docs, legado)
+   - [X] Stage playwright: base + playwright install --with-deps chromium.
+         FEITO 31/08: Dockerfile multi-stage — base (default, == final),
+         playwright (--target playwright), final. O compose do LexLearn-v3
+         não passa target, então o default segue enxuto
    - [X] Volume /data/raw/exams (contrato: o LexLearn monta o mesmo) —
          validado no compose de integração
-   - [ ] Volume /state (SQLite do StateStore) e /app/watchlist.yaml
-         (ou copiar no build e permitir override por volume)
+   - [X] Volume /state (SQLite do StateStore) e /app/watchlist.yaml
+         (ou copiar no build e permitir override por volume).
+         FEITO 31/08: VOLUME /state + ENV LEXCORPUS_STATE_DB e
+         LEXCORPUS_STATE_FILE apontando para lá
 
 ** EM-ANDAMENTO [#A] docker-compose de dev/prod (scheduler + rabbitmq + volumes)
    Containers por FUNÇÃO, todos da mesma imagem (decisão: monolito
@@ -313,8 +481,61 @@
          na raiz do LexLearn-v3 — override aditivo (base intocado),
          profile "crawler", mesma rede do projeto lexlearn-v3, mesmo
          bind ./data:/data do worker, RABBIT_URL=rabbitmq:5672
-   - [ ] LEXCORPUS_DIR no .env do LexLearn-v3 (caminho relativo até o
+         SUPERADO 01/09: o arquivo mudou de casa — ver o checkbox
+         "COMPOSE MUDOU DE CASA" abaixo
+   - [X] LEXCORPUS_DIR no .env do LexLearn-v3 (caminho relativo até o
          repo LexCorpus, ex.: ../../LexCorpus)
+         FEITO: =.env:109= do LexLearn-v3 = =../../LexCorpus=. O DEFAULT
+         do compose (=${LEXCORPUS_DIR:-../LexCorpus}=) aponta para
+         =LexLearn/LexCorpus=, que NÃO existe nesta máquina — quem clonar
+         sem o =.env= quebra no build, e a mensagem não diz por quê.
+         MORTO 01/09: a variável deixou de existir na mudança de casa
+         (build.context virou =.=)
+   - [X] COMPOSE MUDOU DE CASA (01/09): docker-compose.crawler.yml veio
+         do LexLearn para a raiz DESTE repo, e nasceu ao lado o
+         docker-compose.lexlearn.yml (a ponte). Razão de arquitetura:
+         o ADR-0006 prevê DOIS pontos de contato de runtime — o
+         diretório compartilhado e a fila; o build.context apontando
+         para o fonte era um TERCEIRO, de build, e morreu:
+         - build.context: =${LEXCORPUS_DIR:-../LexCorpus}= → =.=
+         - storage: =./data:/data= → bind em sintaxe longa com
+           =${LEXCORPUS_STORAGE_DIR:?...}= — SEM DEFAULT, de propósito:
+           variável ausente grita, caminho errado se calaria (a forma
+           curta quebrava: os dois-pontos do =:?= viravam separador
+           host:container)
+         - =depends_on: rabbitmq= REMOVIDO — o broker é de outro
+           projeto compose; depender de serviço inexistente derruba o
+           projeto inteiro ("depends on undefined service"). Sem espera
+           pelo broker: a garantia é a pré-condição documentada (stack
+           do LexLearn de pé antes)
+         - docker-compose.lexlearn.yml: =name: lexcorpus= (o volume de
+           estado é sempre =lexcorpus_lexcorpus-state=, sem depender do
+           nome do diretório) + rede default externa
+           (=lexlearn-v3_default= — resolve "rabbitmq" no broker de lá)
+         Validado com =docker compose config= nos dois casos (sem a
+         variável recusa nomeando-a; com ela resolve tudo) — reverificado
+         em 04/09, com o mesmo resultado.
+   - [X] Volume =lexcorpus-state= PROVADO EM DADO REAL (01/09). A linha
+         =lexcorpus-state:/state= entrou no =docker-compose.crawler.yml=
+         em 31/08 (LexLearn-v3 =d50846d=); hoje o volume foi lido:
+         | linhas em =arquivo_visto= | 20 (cebraspe/prf_21) |
+         | =first_seen= distintos    | 1 — 01:40:39 |
+         | =last_seen= distintos     | 1 — 01:45:40 |
+         UM =first_seen= e UM =last_seen=, cinco minutos entre eles: o
+         segundo =run --rm= ACHOU as 20 linhas do primeiro e só avançou o
+         =last_seen=. Volume não-persistido daria banco novo e vazio, com
+         =first_seen == last_seen=. Não é plausibilidade de YAML: são dois
+         contêineres efêmeros e a memória entre eles.
+         E o CICLO §6.11 rodou no caminho de produção, não em teste: 3
+         gabaritos preliminares com =vigente=0= e
+         =substituido_por=Gab_Definitivo_085_PRFCF_001_01.pdf=.
+         A cadeia do caminho foi conferida DENTRO do contêiner, não
+         suposta — =scrapy settings --get LEXCORPUS_STATE_DB= devolve
+         =/state/lexcorpus_state.db= (Dockerfile ENV -> =settings.py=
+         =os.environ= -> setting do Scrapy que o pipeline lê). Importa
+         porque o pipeline lê SETTING, não env: se o =settings.py= não
+         fizesse a ponte, o ENV do Dockerfile seria decoração e o estado
+         cairia em =/app/state=, fora do volume, calado.
    - [ ] Teste e2e via compose: crawl fcc → evento consumido pelo worker
          do LexLearn
    - [ ] Serviço scheduler: command python -m lexcorpus.scheduler;
@@ -340,16 +561,23 @@
    README.
 
 * Documentação
-** TODO [#A] Mover .md para docs/ e corrigir links
+** FEITO [#A] Mover .md para docs/ e corrigir links
+   CLOSED: 2026-08-31
    Decisão tomada: raiz só com README.md.
    - [X] git mv CONTRATO.md COMUNICADO_INTEGRACAO_OK.md docs/
    - [X] Este backlog: docs/BACKLOG.org (conteúdo já em org-mode)
    - [X] README: atualizar TODAS as referências (hoje cita CONTRATO.md,
          schema/, consumer_teste.py com paths da raiz)
-   - [ ] Referências cruzadas dentro dos próprios docs (o comunicado cita
-         CONTRATO.md e consumer_teste.py)
-   - [ ] Avisar o time LexLearn: o contrato mudou de path no repo
-   - BOA TAREFA PARA COMEÇAR UMA SESSÃO (isolada, sem risco)
+   - [X] Referências cruzadas dentro dos próprios docs (o comunicado cita
+         CONTRATO.md e consumer_teste.py) — FEITO 30/08: comunicado passa a
+         citar docs/CONTRATO.md e tests/consumer_teste.py; README:7 idem
+         (docs/CONTRATO.md). Demais docs conferidos (schema/, spiders/,
+         tests/ citados já estavam corretos).
+   - [X] Avisar o time LexLearn: o contrato mudou de path no repo.
+         FEITO 31/08: referências atualizadas no LexLearn-v3 —
+         backend/app/workers/lexcorpus_consumer.py (comentário de cabeçalho)
+         e docs/architecture/decisions/ADR-011 passam a citar
+         docs/CONTRATO.md + schema/*.json no repo LexCorpus
 
 ** TODO [#B] Escrever os ADRs iniciais (docs/architecture/decisions/)
    O LexLearn já tem cultura de ADR; trazer para cá. Formato: 4 dígitos.
@@ -368,7 +596,8 @@
          override por regex de classe; mencionar a cadeia de técnicas
          com fallback como evolução prevista
 
-** EM-ANDAMENTO [#B] Atualizar README (novos spiders, automação, docs/)
+** FEITO [#B] Atualizar README (novos spiders, automação, docs/)
+   CLOSED: 2026-08-31
    Depois dos itens acima:
    - [X] Estrutura: adicionar scheduler.py, spiders/base.py,
          agregador_generico.py, estrategia.py, watchlist.yaml,
@@ -378,10 +607,12 @@
    - [X] Tabela de bancas suportadas e status (cebraspe ✅, fcc ✅
          gabaritos, fgv em construção, cesgranrio bloqueada, pci
          descoberta, estrategia/agregador_generico em validação) — 09/08
-   - [ ] Seção "Rodar": modo manual (scrapy crawl) E modo automático
+   - [X] Seção "Rodar": modo manual (scrapy crawl) E modo automático
          (scheduler + watchlist); modo container ao lado do LexLearn
-         (docker-compose.crawler.yml) — depende do scheduler existir
-   - [ ] Seção "Por onde começar": docs/CONTRATO.md → docs/BACKLOG.org →
+         (docker-compose.crawler.yml) — depende do scheduler existir.
+         FEITO 31/08: manual e automático já estavam; adicionada a seção
+         "Rodar (modo container — ao lado do LexLearn)"
+   - [X] Seção "Por onde começar": docs/CONTRATO.md → docs/BACKLOG.org →
          ADRs → schema/
 
 * Alinhar com o LexLearn (contrato §9 — não mexer unilateralmente)
@@ -402,6 +633,109 @@
    consumidor de teste do LexLearn ouvindo.
 
 * Feito (histórico recente)
+** FEITO [#A] Watchlist YAML + scheduler (a automação)               :pipeline:
+   CLOSED: 2026-08-26
+   lexcorpus/scheduler.py: lê watchlist.yaml, calcula alvos vencidos pelo
+   cron de cada um (croniter — tick mais recente vs último disparo) e
+   dispara os crawls. Decisões que divergem do enunciado original:
+   - Disparo via SUBPROCESSO (`scrapy crawl ...`), não CrawlerProcess
+     em-processo: um crawl travado não derruba o scheduler nem os das
+     outras bancas, e cada crawl nasce com reactor limpo
+   - Último disparo em JSON próprio (./state/scheduler_state.json;
+     --state-file / LEXCORPUS_STATE_FILE; volume /state no Docker) —
+     o StateStore SQLite completo fica no item próprio (ciclo
+     preliminar→definitivo)
+   Mantido do enunciado: sequencial por banca + bancas em paralelo
+   (uma thread por grupo), trava anti-overlap por alvo, seção
+   "descoberta" suportada (os spiders de listagem em si são o item
+   "Spiders de descoberta"), alvo que falha não atualiza estado →
+   retenta na próxima verificação. Modos: --once (default; cron/
+   supercronic no container) e --loop SEG. Deps novas: croniter, PyYAML.
+   Watchlist corrigido na mesma passada: fcc params codigo→slug (o
+   spider aceita slug), comentários FGV/FCC/Cesgranrio atualizados
+   (spiders prontos; Cesgranrio via evento_id, sem esqueleto).
+   Testes: tests/test_scheduler.py (15 casos, subprocess mockado).
+   Dry-run real validado (só cebraspe ativo → 1 comando).
+** FEITO ADR-0006: busca por palavra-chave + catálogo + orquestrador :pesquisa:
+   CLOSED: 2026-08-25
+   Entregue em 19/08 (buscador.py, catalogo.py, orquestrador.py +
+   catalogo.yaml, tests/test_buscador.py), faltava o registro aqui e a
+   varredura de consistência pós-Cesgranrio. Fechamento 25/08:
+   - orquestrador: SPIDERS_POR_BANCA["cesgranrio"] aponta para o spider
+     real (API pública, -a evento_id=N) — não mais "BLOQUEADA/WAF".
+     montar_comando generalizado: params fora de url/slug/banca/cargo
+     (ex.: evento_id) vão direto ou viram placeholder <PREENCHER> com
+     aviso ao operador
+   - ADR-0006: errata no topo registrando que a premissa "Cesgranrio
+     bloqueada por WAF" caducou em 18/08 (API JSON pública, sem
+     Playwright); o mecanismo esqueleto+Playwright fica para WAFs futuros
+   - README: removida a linha duplicada "cesgranrio.py ESQUELETO"
+** FEITO CLI de consulta ao storage (lexcorpus/consulta.py)        :pipeline:
+   CLOSED: 2026-08-25
+   Lado leitor do storage: varre os sidecars (*.meta.json) no layout do
+   contrato §6.9 ({banca}/{concurso}/) e filtra por banca (exata),
+   concurso (trecho), cargo (inclui consolidados multi-cargo "*", §5) e
+   papel ("gabarito" abrange preliminar + definitivo). --copiar DIR leva
+   PDF + sidecar. Storage via --store / LEXCORPUS_FILES_STORE / default
+   Docker — mesma precedência do settings.py. Não baixa nada da rede.
+   Validado contra o storage real (cesgranrio/bnb0124, fgv/cnu_2025,
+   fcc/dpeba125) + tests/test_consulta.py (10 casos, storage fake em
+   tmp_path).
+** FEITO Spider Cesgranrio — API pública do portal (sem Playwright)  :spiders:
+   CLOSED: 2026-08-18
+   Estava BLOQUEADO desde 05/08 (403 do Azure Front Door para qualquer
+   cliente não-navegador). Re-diagnóstico 18/08: o site foi reformulado,
+   o WAF não bloqueia mais HTTP simples e a SPA do portal consome uma API
+   JSON PÚBLICA — Playwright desnecessário (stage playwright do Dockerfile
+   perde a única banca que o justificava por ora). spiders/cesgranrio.py:
+   GET /api/PortalEventos/{id} + /api/PortalEventoConteudos/publico/{id};
+   blocos {titulo, texto(HTML)} com links Azure Blob (SAS próprio, válido
+   até 2036). Classificação pelo termo inicial do link + título do bloco
+   (PROVAS→prova, GABARITOS→preliminar, GABARITO FINAL→definitivo);
+   descarte FORTE via hook RE_DESCARTAR (armadilhas cobertas: "LISTAGEM
+   GERAL - PROVA DE TÍTULOS" não é prova; "ANALISTA" não pode casar
+   "lista"). Cargo extraído do texto do link preservando numeral romano
+   final ("TÉCNICO BANCÁRIO I" ≠ "III"). Validado: parse seco nos 12
+   eventos ativos + crawl real BNB 01/2024 (evento_id=10): 5 PDFs (3
+   provas, 1 gabarito preliminar, 1 definitivo), sidecars e evento v2.0.
+   Eventos 100% digitais/em andamento retornam 0 itens (normal).
+   Teste: tests/test_cesgranrio_parse.py. Uso:
+   scrapy crawl cesgranrio -a evento_id=N (ids em /api/PortalEventos).
+** FEITO [#A] Spider FGV (conhecimento.fgv.br)                       :spiders:
+   CLOSED: 2026-08-18
+   Site Drupal, HTML estático, SEM captcha (verificado 05/08). Página do
+   concurso: /concursos/{slug} (ex.: dataprev26). PDFs servidos de
+   /sites/default/files/concursos/*.pdf, nomes descritivos. Quando a
+   prova é aplicada surge a seção "Provas e Gabaritos" na própria página.
+   - [X] Copiar spiders/exemplo_banca.py → spiders/fgv.py
+   - [X] Listagem /concursos extrai os slugs disponíveis
+         FEITO 18/08: modo descoberta (-a descoberta=1) percorre a listagem
+         com paginação (a[rel=next], ?page=N), extrai slug+rótulo dos cards
+         (a[href^="/concursos/"][hreflang]) e grava JSONL em
+         eventos_debug/descoberta/fgv.jsonl. Validado no site real:
+         339 slugs em 13 páginas.
+   - [X] Filtrar PDFs pelo path /concursos/ (rodapé tem termos de uso e
+         aviso de cookies que NÃO são do concurso)
+   - [X] Ignorar "Vista de Prova" (espelho do candidato, exige CPF)
+   - [X] Classificação de papel: hoje (08/08) o fgv.py usa cópias LOCAIS
+         de regex (_RE_GAB_*, eh_relevante) — mais estritas e CORRETAS
+         para o padrão FGV ("Gabarito Oficial Preliminar"). Migrar para
+         heuristics.py (ADR-0004) DEPOIS de corrigir o bug do "oficial"
+         no módulo (ver item em Pipeline/correções), promovendo as
+         regex do FGV a parâmetros nomeados
+         FEITO 13/08: fgv.py herda LexCorpusSpider e repassa regex FGV
+         pelos hooks RE_*; relevância preserva gabaritos retificados.
+   - [X] Montar o item via make_item da base fina (hoje o fgv.py monta
+         o ArquivoItem na mão)
+         FEITO 13/08: make_item ganhou override opcional de slug canônico
+         para preservar -a concurso= (ex.: cnu_2025).
+   - [X] Teste de parse com fixture (modelo: tests/test_pci_parse.py)
+         FEITO 13/08: tests/test_fgv_parse.py cobre bloco, tipos,
+         gabarito oficial preliminar, definitivo retificado, descarte e dedup.
+   Notas: aceita -a url= para páginas fora de /concursos/ (o cpnu2 vive
+   na raiz do site); CNU 2025 ensaiado (eventos_debug/cnu_2025.json);
+   nomes opacos (b1101.pdf) viram nomes semânticos {concurso}_{bloco}_
+   tipo_{n}.pdf. Quick win: HTTP puro, sem browser.
 ** FEITO base.py alinhada ao ADR-0004 (delegação, sem duplicação)  :spiders:
    CLOSED: 2026-08-09
    Revisão do commit 5348271 constatou que base.py duplicava regex e
@@ -496,6 +830,11 @@
    item multi-stage.
 ** FEITO docker-compose.crawler.yml (integração LexLearn-v3)          :docker:
    CLOSED: 2026-08-05
+   ERRATA (01/09): o arquivo mudou de casa — desde 01/09 vive na raiz
+   DESTE repo, com o docker-compose.lexlearn.yml de ponte ao lado (e o
+   LEXCORPUS_DIR morreu). Registro original mantido abaixo; o estado
+   vigente está no checkbox "COMPOSE MUDOU DE CASA" do item
+   "docker-compose de dev/prod".
    Override aditivo na raiz do LexLearn-v3 — docker-compose.base.yml
    intocado. Profile "crawler" (não sobe com o up normal), mesma rede
    do projeto lexlearn-v3 (resolve rabbitmq pelo nome), mesmo bind

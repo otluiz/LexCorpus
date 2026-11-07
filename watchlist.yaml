@@ -8,6 +8,7 @@
 #   banca   — slug canônico (minúsculas, sem acento) — chave do storage
 #   spider  — nome do spider Scrapy (scrapy crawl <spider>)
 #   params  — repassados como -a chave=valor ao spider
+#   settings — (opcional) repassados como -s CHAVE=valor ao Scrapy
 #   cron    — quando coletar (horário local do container; defina TZ)
 #   ativo   — false = pausado OU spider ainda não implementado
 #
@@ -25,34 +26,101 @@ alvos:
     cron: "0 6 * * *"          # 1x/dia — ciclo encerrado
     ativo: true
 
-  # --- FGV — spider em construção (BACKLOG [#A]) ------------------------
+  # Carreira fiscal (26/09) — banca confirmada na página oficial da Cebraspe.
+  # Sefaz-AL 2019 (aplicação 2020/21): 2 cargos, 13 PDFs, gabaritos definitivos.
+  - banca: cebraspe
+    spider: cebraspe
+    params: {slug: sefaz_al_19_auditor}
+    cron: "10 6 * * *"         # 1x/dia — ciclo encerrado
+    ativo: true
+
+  # Sefaz-DF 2019 (SEEC/DF, aplicação 2020): 1 cargo, 5 PDFs. A API publica só
+  # o caderno da TARDE (específicos); o de conhecimentos básicos falta na fonte.
+  # O concurso novo (2026, Cebraspe, 265 vagas) ainda não tem edital.
+  - banca: cebraspe
+    spider: cebraspe
+    params: {slug: seec_auditor_19}
+    cron: "20 6 * * *"         # 1x/dia — ciclo encerrado
+    ativo: true
+
+  # Sefaz-CE 2021 (4 cargos de auditor fiscal, 17 PDFs; fixture dos testes).
+  - banca: cebraspe
+    spider: cebraspe
+    params: {slug: sefaz_ce_21}
+    cron: "25 6 * * *"         # 1x/dia — ciclo encerrado
+    ativo: true
+
+  # Sefaz-AL 2026 (26/09): edital aberto, inscrições até 21/10, R$ 25,3 mil.
+  # Slug confirmado na API (1 cargo, AFTE, 0 arquivos por ora).
+  - banca: cebraspe
+    spider: cebraspe
+    params: {slug: sefaz_al_26}
+    cron: "40 6 * * *"         # 1x/dia até a prova; depois 4x/dia no ciclo
+    ativo: true
+
+  # --- FGV — spider pronto (18/08) ----------------------------------------
   - banca: fgv
     spider: fgv
     params: {slug: dataprev26}
     cron: "0 */6 * * *"        # 4x/dia — ciclo preliminar→definitivo aberto
-    ativo: false               # ativar quando spiders/fgv.py existir
+    ativo: false               # spider validado; ativar p/ entrar na automação
 
-  # --- FCC — spider em construção (BACKLOG [#A]) ------------------------
+  # --- FCC — spider pronto (05/08; gabaritos oficiais) ---------------------
   - banca: fcc
     spider: fcc
-    params: {codigo: dpeba125}
+    params: {slug: dpeba125}
+    settings: {ROBOTSTXT_OBEY: false}   # robots.txt da FCC bloqueia /concursos/ (BACKLOG)
     cron: "0 6,18 * * *"       # 2x/dia
-    ativo: false               # ativar quando spiders/fcc.py existir
+    ativo: false               # spider validado; ativar p/ entrar na automação
 
-  # --- CESGRANRIO — bloqueado (WAF; precisa imagem Playwright) ----------
-  # Entrada abaixo gerada pela descoberta ADR-0006 (buscador + orquestrador):
-  # Transpetro 2026, banca Cesgranrio (catálogo PCI confirma certames
-  # Cesgranrio×Transpetro 2006–2023). spiders/cesgranrio.py é ESQUELETO —
-  # validar PDF_SELECTOR contra o HTML real antes de ativar.
+  # Sefaz-CE 2026 (26/09): auditor-fiscal, FCC. Prova em 01/08, resultado
+  # preliminar em 09/09; o gabarito sai como edital ao fim do certame (os
+  # cadernos ficam no portal do candidato — não raspáveis). Até lá, nada.
+  - banca: fcc
+    spider: fcc
+    params: {slug: sface125}
+    settings: {ROBOTSTXT_OBEY: false}   # robots.txt da FCC bloqueia /concursos/ (BACKLOG)
+    cron: "15 6,18 * * *"      # 2x/dia — ciclo aberto
+    # DESATIVADO em 13/10 (dono do produto): a coleta passa a rodar sozinha no
+    # gpu01, e a FCC pede no robots.txt que robôs não acessem /concursos/ nem
+    # PDFs. Volta só com autorização da FCC ou por fonte oficial alternativa
+    # (ex.: o gabarito republicado no DOE do Ceará).
+    ativo: false
+
+  # --- CESGRANRIO — spider pronto (18/08, API pública do portal) -----------
+  # Transpetro 2023 (PSP-RH-2023): portal próprio do cliente, mesma API. O
+  # evento junta 3 editais (nível médio 2023.1, superior 2023.2, mar 2023.3)
+  # -> dividir_editais: um concurso por edital. 51 provas + gabaritos
+  # preliminar e final + padrões de resposta = 59 PDFs (crawl de 26/09).
+  - banca: cesgranrio
+    spider: cesgranrio
+    organ: Transpetro
+    params: {host: transpetro.cesgranrio.org.br, evento_id: "12",
+             concurso: transpetro_2023, dividir_editais: "1"}
+    cron: "30 6 * * 1"         # 1x/semana — ciclo encerrado em 2024
+    ativo: true
+
+  # Transpetro 2026: evento 22 do portal GERAL (confirmado em 26/09). Prova
+  # em nov/dez/2026 — até lá a página só tem editais (o spider não emite
+  # nada). Depois da prova, subir para 4x/dia enquanto o ciclo
+  # preliminar→definitivo estiver aberto.
   - banca: cesgranrio
     spider: cesgranrio
     organ: Transpetro
     concurso: transpetro_2026
     edital_data: "2026-08-01"
     cargos: [Analista de Sistemas, Administrador, Engenheiro de Produção]
-    params: {url: "https://www.cesgranrio.org.br/concurso/transpetro-2026/"}
-    cron: "0 */6 * * *"
-    ativo: false  # ESQUELETO: validar seletores antes de ativar
+    params: {evento_id: "22", concurso: transpetro_2026}
+    cron: "0 7 * * *"          # 1x/dia até a prova
+    ativo: true
+
+  # PC-AP 2026 (26/09): Delegado R$ 31,4 mil + Oficial Investigador; evento 26
+  # do portal geral. Inscrições até 19/10, prova em 06/12.
+  - banca: cesgranrio
+    spider: cesgranrio
+    params: {evento_id: "26", concurso: pc_ap_2026}
+    cron: "10 7 * * *"         # 1x/dia até a prova; depois 4x/dia no ciclo
+    ativo: true
 
 # Spiders de descoberta: percorrem SÓ listagens (sem baixar PDF) e propõem
 # novos alvos. Saída em eventos_debug/descoberta/; promoção ao watchlist

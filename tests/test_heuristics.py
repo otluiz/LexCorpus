@@ -2,9 +2,8 @@
 # Função:   testes unitários de lexcorpus/heuristics.py — funções puras,
 #           sem instanciar spiders (ADR-0004). Golden cases de classificação
 #           de papel + regimes de descarte fraco (default) e forte (override).
-#           O bug do "oficial" (backlog, [#A]) está marcado como xfail
-#           estrito: ao corrigir o módulo, o XPASS quebra o teste e lembra
-#           de remover o marcador.
+#           Inclui o caso FGV "Gabarito Oficial Preliminar", que não pode
+#           ser tratado como definitivo só por conter "oficial".
 """Rodar:  pytest tests/test_heuristics.py -v"""
 import re
 
@@ -24,7 +23,10 @@ from lexcorpus import heuristics as h
     ("Gabarito", "https://x/gabarito.pdf", "gabarito_definitivo"),
     ("Prova Objetiva", "https://x/prova.pdf", "prova"),
     ("Caderno de Provas", "https://x/caderno.pdf", "prova"),
-    ("Padrão de Resposta", "https://x/padrao.pdf", "prova"),
+    ("Padrão de Resposta", "https://x/padrao.pdf", None),              # discursivo
+    ("Prova Discursiva", "https://x/disc.pdf", None),
+    ("Justificativas de alteração de gabarito", "https://x/j.pdf", None),
+    ("Prova Objetiva e Discursiva", "https://x/caderno.pdf", "prova"), # tem as objetivas
     ("Tipo 1", "https://x/b1101.pdf", None),          # FGV: sem pista no texto
     ("Termos de Uso", "https://x/termos.pdf", None),
     ("", "https://x/arquivo.pdf", None),
@@ -33,11 +35,9 @@ def test_classificar_papel_defaults(texto, url, esperado):
     assert h.classificar_papel(texto, url) == esperado
 
 
-# --- bug conhecido [#A]: "oficial" contamina RE_GAB_DEF ----------------------
+# --- regressão [#A]: "oficial" não implica gabarito definitivo ----------------
 # Rótulo padrão FGV: TODO gabarito é "Oficial" (preliminar e definitivo).
-# Hoje RE_GAB_DEF casa "oficial" antes de RE_GAB_PRE rodar.
 
-@pytest.mark.xfail(strict=True, reason="BUG [#A] backlog: RE_GAB_DEF casa 'oficial' — corrigir precedência no módulo")
 def test_gabarito_oficial_preliminar_nao_eh_definitivo():
     assert h.classificar_papel(
         "Gabarito Oficial Preliminar da Prova Objetiva", "https://x/gab.pdf"
@@ -101,3 +101,22 @@ def test_override_regex_fgv_resolve_preliminar_corretamente():
         "Gabarito Oficial Preliminar", "https://x/gab.pdf",
         re_gab_def=RE_GAB_DEF_FGV, re_gab_pre=RE_GAB_PRE_FGV,
     ) == "gabarito_preliminar"
+
+
+
+@pytest.mark.parametrize("nome,discursivo", [
+    ("PRF_21_PADRAO_DE_RESPOSTA_DEFINITIVO.PDF", True),
+    ("SEFAZ_CE_21_PADRO_DE_RESPOSTA_DEFINITIVO_CARGO_1.PDF", True),   # o Ã some
+    ("SEFAZAL515002A02E3425_PADRAORESPOSTA_CARGO_2_.PDF", True),      # sem separador
+    ("598_SEFAZ_001_DISC.PDF", True),
+    ("MATRIZ_504_SEECDF001_JUSTIFICATIVA.PDF", True),
+    ("prova_redacao.pdf", True),
+    ("peca_pratica_procurador.pdf", True),
+    ("estudo_de_caso_cargo_2.pdf", True),
+    ("MATRIZ_598_SEFAZ_001.PDF", False),
+    ("GAB_DEFINITIVO_MATRIZ_598_SEFAZ_001_00_PAG_5.PDF", False),
+    ("prova_objetiva_e_discursiva.pdf", False),
+    ("disciplinas_basicas.pdf", False),                               # "disc" de disciplina
+])
+def test_eh_discursivo(nome, discursivo):
+    assert h.eh_discursivo(nome) is discursivo

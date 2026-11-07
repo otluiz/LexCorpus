@@ -1,0 +1,62 @@
+# carreiras_regras.yaml — sugestão de carreira na varredura (ADR-0009)
+#
+# A regra SUGERE; quem grava a carreira é o operador, em lote
+# (python -m lexcorpus.varredura revisar). Os nomes de carreira são os do
+# contrato com o LexPubli (schema/lexpubli/v1/common.schema.json).
+#
+# Casamento: termo inteiro, sem acento e sem caixa, no nome do órgão ou no
+# texto dos cargos. Um termo de `exceto` presente anula a carreira. Casou com
+# mais de uma carreira, ou com nenhuma: fica sem sugestão.
+#
+# Só as carreiras da primeira leva (13/10): fiscal e tribunais.
+
+version: 1
+
+carreiras:
+  fiscal:
+    termos:
+      - sefaz
+      - secretaria da fazenda
+      - secretaria de fazenda
+      - secretaria de estado da fazenda
+      - secretaria de estado de fazenda
+      - secretaria de estado de economia     # SEEC-DF, a Sefaz do DF
+      - receita federal
+      - receita estadual
+      - auditor fiscal
+      - auditora fiscal
+      - fiscal de tributos
+      - fiscal de rendas
+      - auditor da receita
+      - fiscal da receita
+    exceto:
+      - auditor fiscal do trabalho          # MTE: carreira própria, não tributária
+      - tribunal de contas                  # controle
+
+  tribunais:
+    termos:
+      - tribunal de justica
+      - tribunal regional federal
+      - tribunal regional do trabalho
+      - tribunal regional eleitoral
+      - tribunal superior do trabalho
+      - tribunal superior eleitoral
+      - superior tribunal de justica
+      - superior tribunal militar
+      - supremo tribunal federal
+      - conselho nacional de justica
+      - justica federal
+      - justica do trabalho
+      - justica eleitoral
+      - analista judiciario
+      - tecnico judiciario
+      - oficial de justica
+      - tjdft
+    exceto:
+      - tribunal de contas                  # controle
+      - juiz                                # magistratura é carreira jurídica (ADR-0004)
+      - juiza
+      - juiz substituto
+      - magistratura
+      - notarial                            # cartórios: outro concurso, outra prova
+      - registral

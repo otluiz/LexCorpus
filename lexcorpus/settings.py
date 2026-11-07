@@ -12,7 +12,7 @@ NEWSPIDER_MODULE = "lexcorpus.spiders"
 
 # --- Educação / robustez -----------------------------------------------------
 ROBOTSTXT_OBEY = True                    # respeita robots.txt das bancas
-USER_AGENT = "lexcorpus/0.1 (+contato@exemplo.br)"
+USER_AGENT = "lexcorpus/0.1 (+olto@ecomp.poli.br)"
 
 # --- Concorrência e throttle (anti-bloqueio) ---------------------------------
 CONCURRENT_REQUESTS = 8
@@ -38,8 +38,27 @@ RETRY_HTTP_CODES = [429, 500, 502, 503, 504, 408]
 FILES_STORE = os.environ.get("LEXCORPUS_FILES_STORE", "/data/raw/exams")
 # Esquema usado ao montar pasta_uri no evento (contrato §7). file:// hoje.
 STORAGE_URI_SCHEME = "file://"
-# Expira o cache de download: não rebaixa o mesmo arquivo dentro de N dias.
-FILES_EXPIRES = 90
+# Cache de download (~2 anos): um PDF já baixado não é rebaixado dentro de
+# 700 dias. PROVA NÃO EXPIRA — passado o prazo, o pipeline NÃO sobrescreve
+# sozinho: mantém o arquivo e pede decisão do administrador (WARNING no log).
+# Para autorizar o re-download dos expirados num crawl:
+#   scrapy crawl X -s LEXCORPUS_REBAIXAR_EXPIRADOS=True
+# (ver LexCorpusFilesPipeline._onsuccess em pipelines.py)
+FILES_EXPIRES = 700
+
+# --- Versão do contrato emitida (docs/CONTRATO.md) ---------------------------
+# "2.0" (default) ou "2.1". A 2.1 acrescenta o campo `caderno`; o schema que o
+# LexLearn valida só aceita 2.1 depois de atualizado. Por isso o default fica
+# em 2.0 (o `caderno` é retirado na saída) até o LexLearn confirmar o schema
+# novo: aí basta LEXCORPUS_CONTRATO_VERSAO=2.1 — nenhuma mudança de código.
+LEXCORPUS_CONTRATO_VERSAO = os.environ.get("LEXCORPUS_CONTRATO_VERSAO", "2.0")
+
+# --- StateStore (memória entre crawls — contrato §6.11) ----------------------
+# SQLite com o que cada concurso já publicou: é o que permite distinguir
+# "novo" (concurso.disponivel), "mudou" (concurso.atualizado — ex.: saiu o
+# gabarito definitivo e o preliminar é arquivado) e "nada mudou" (não publica;
+# re-run diário fica gratuito). No Docker, apontar para o volume /state.
+LEXCORPUS_STATE_DB = os.environ.get("LEXCORPUS_STATE_DB", "state/lexcorpus_state.db")
 
 # --- RabbitMQ ----------------------------------------------------------------
 #RABBIT_ENABLED = True                   # True em produção; False grava evento em disco
@@ -49,10 +68,16 @@ RABBIT_URL = os.environ.get("RABBIT_URL", "amqp://guest:guest@localhost:5672/")
 RABBIT_EXCHANGE = "lexcorpus.events"
 RABBIT_ROUTING_DISPONIVEL = "concurso.disponivel"
 RABBIT_ROUTING_ATUALIZADO = "concurso.atualizado"
-EVENTOS_OUT_DIR = "eventos_debug"        # usado quando RABBIT_ENABLED=False
+# Broker do LexPubli (LexPubli ADR-0005 §2a): a automação LexPubli <-> LexCorpus
+# (consumidor e respostas document.*) NÃO passa pelo broker do LexLearn. A
+# RABBIT_URL acima fica só com o contrato v2.1. Vazio = respostas em disco.
+LEXPUBLI_RABBIT_URL = os.environ.get("LEXPUBLI_RABBIT_URL", "")
+LEXPUBLI_RESPOSTA_EXCHANGE = "lexcorpus.events"
+EVENTOS_OUT_DIR = os.environ.get("EVENTOS_OUT_DIR", "eventos_debug")  # usado quando RABBIT_ENABLED=False
 
 # --- Cadeia de pipelines -----------------------------------------------------
 ITEM_PIPELINES = {
+    "lexcorpus.pipelines.FiltroObjetivasPipeline": 50,   # descarta discursivo ANTES de baixar
     "lexcorpus.pipelines.LexCorpusFilesPipeline": 100,   # baixa o PDF
     "lexcorpus.pipelines.SidecarPipeline": 200,          # checksum + sidecar
     "lexcorpus.pipelines.EventoRabbitPipeline": 300,     # publica evento

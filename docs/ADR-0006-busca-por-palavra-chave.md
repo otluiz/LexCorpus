@@ -4,6 +4,24 @@
 **Data:** 2026-08-19
 **Autores:** Prof. Othon Luiz, Manus AI
 
+> **ERRATA (25/08):** a premissa "Cesgranrio bloqueada por WAF (Azure Front
+> Door 403), exige esqueleto Playwright" — citada na Decisão §3, nas
+> Consequências (risco b) e no Fluxo de referência — deixou de valer em
+> 18/08: o portal foi reformulado e expõe uma API JSON pública
+> (`/api/PortalEventos/{id}`), sem browser. `spiders/cesgranrio.py` é um
+> spider real (`-a evento_id=N`) e o `SPIDERS_POR_BANCA` do orquestrador já
+> aponta para ele. O mecanismo de esqueleto + rota Playwright permanece
+> para bancas futuras com WAF. O restante do ADR segue vigente.
+
+> **REVISÃO (12/10/2026, ADR-0007):** a regra "a promoção é sempre decisão
+> do operador" (Decisão §2) foi revisada. Concursos aprovados na curadoria
+> do LexPubli chegam por evento (`contest.discovery.created`), e uma
+> **política versionada** (bancas validadas, limiares do buscador, limite
+> de certames anteriores) promove sozinha os casos de rotina. O operador
+> passa a definir a política e continua decidindo as exceções. Os comandos
+> manuais deste ADR seguem valendo sem mudança. Ver
+> `docs/architecture/decisions/ADR-0007-consumidor-lexpubli-e-politica-de-coleta.md`.
+
 ## Contexto
 
 O LexCorpus já é funcional para **baixar** provas de bancas conhecidas

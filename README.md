@@ -4,7 +4,7 @@ Coletor "burro" que raspa PDFs de concursos e os entrega ao LexLearn por
 **arquivos em storage** + **eventos RabbitMQ** (padrão Claim Check). Toda a
 inteligência de domínio (parsing, normalização, classificação) é do LexLearn.
 
-O acordo entre os dois sistemas está em `CONTRATO.md` (v2.0). Os formatos de
+O acordo entre os dois sistemas está em `docs/CONTRATO.md` (v2.0). Os formatos de
 mensagem estão em `schema/evento.schema.json` e `schema/sidecar.schema.json`.
 
 ## Estrutura
@@ -22,12 +22,28 @@ mensagem estão em `schema/evento.schema.json` e `schema/sidecar.schema.json`.
                              (ano{mês/dia}/banca/cargos, YAML versionado)
       orquestrador.py        mapeia banca→spider, monta o `scrapy crawl` ou
                              gera esqueleto parametrizável (ADR-0006)
+      consulta.py            CLI de consulta ao storage: filtra os sidecars
+                             por banca/concurso/cargo/papel e lista ou copia
+                             os PDFs (lado leitor; não baixa nada da rede)
+      scheduler.py           a automação: lê watchlist.yaml, dispara os alvos
+                             cujo cron venceu (subprocesso por crawl, estado
+                             em JSON), sequencial por banca
+      statestore.py          SQLite com o que cada concurso já publicou:
+                             re-run publica só o delta e o definitivo
+                             arquiva o preliminar (contrato §6.11);
+                             também a idempotência e as ligações com o
+                             LexPubli (ADR-0007)
+      consumidor.py          escuta os concursos aprovados no LexPubli e
+                             aplica a politica_coleta.yaml (ADR-0007)
+      alvos.py               resolve banca + concurso no alvo do spider
+      respostas.py           document.acquisition.* para o LexPubli
+      contratos_lexpubli.py  valida contra schema/lexpubli/v1/
       spiders/
         base.py              LexCorpusSpider — make_item (fábrica do
                              ArquivoItem do contrato v2.0)
         exemplo_banca.py     modelo de um spider por banca
-        cesgranrio.py        ESQUELETO gerado (ADR-0006) — validar seletores
         cebraspe.py          API oficial de eventos + CDN
+        cesgranrio.py        API pública do portal (blocos de conteúdo)
         fcc.py               gabaritos oficiais (cadernos não são públicos)
         fgv.py               conhecimento.fgv.br (inclui o CNU)
         pci.py               PCI Concursos — modo teste (ADR-0001: PCI é
@@ -46,19 +62,87 @@ mensagem estão em `schema/evento.schema.json` e `schema/sidecar.schema.json`.
 |------------|----------------------|------------------------------------------|
 | CEBRASPE   | `cebraspe`           | ✅ funcional (API oficial)                |
 | FCC        | `fcc`                | ✅ gabaritos oficiais (provas via PCI)    |
-| FGV        | `fgv`                | 🚧 em construção (CNU 2025 ensaiado)      |
+| FGV        | `fgv`                | ✅ funcional (+ descoberta de slugs)      |
 | PCI        | `pci`                | 🔎 descoberta apenas (ADR-0001)           |
 | Estratégia | `estrategia`         | 🧪 código pronto, validação em andamento  |
 | Agregadores| `agregador_generico` | 🧪 código pronto, validação em andamento  |
-| Cesgranrio | —                    | ⛔ bloqueada (WAF/Azure Front Door)       |
+| Cesgranrio | `cesgranrio`         | ✅ funcional (API pública do portal)      |
 
 ## Rodar (modo dev, sem RabbitMQ)
 
     pip install -r requirements.txt
     scrapy crawl exemplo_banca      # grava eventos em eventos_debug/*.json
 
+Descoberta (só lista os concursos disponíveis, sem baixar PDF — grava JSONL
+em `eventos_debug/descoberta/`):
+
+    scrapy crawl fgv -a descoberta=1
+
 Em produção: `RABBIT_ENABLED=True` no settings (ou via -s), e o publisher
 emite no exchange `lexcorpus.events` com routing key `concurso.disponivel`.
+
+## Rodar (modo automático — scheduler + watchlist)
+
+O `watchlist.yaml` (raiz) é a lista versionada de alvos: `banca`, `spider`,
+`params`, `cron`, `ativo`. O scheduler dispara `scrapy crawl` para cada alvo
+ativo cujo cron venceu — sequencial dentro de cada banca, bancas distintas
+em paralelo — e grava o último disparo num estado JSON (re-run sem tick
+novo não faz nada):
+
+    python -m lexcorpus.scheduler --once          # roda os vencidos e sai
+    python -m lexcorpus.scheduler --loop 60       # verifica a cada 60s
+    python -m lexcorpus.scheduler --once --dry-run  # só imprime os comandos
+
+O estado fica em `./state/scheduler_state.json` (override: `--state-file`
+ou `LEXCORPUS_STATE_FILE`; no Docker, apontar para o volume `/state`).
+Adicionar um concurso à automação = commit de uma entrada no watchlist.
+
+Cada crawl também consulta o **StateStore** (`state/lexcorpus_state.db`,
+override: `LEXCORPUS_STATE_DB`) — um SQLite com o que cada concurso já
+publicou. É ele quem faz o re-run diário ser barato: nada mudou, **nada é
+publicado**. E é ele quem implementa o ciclo preliminar→definitivo do
+contrato (§6.11): quando o gabarito definitivo aparece num crawl, o
+preliminar é arquivado (`vigente: false` + `substituido_por`, no evento e no
+sidecar — o PDF fica intacto) e o conjunto sai como `concurso.atualizado`.
+
+## Rodar (modo container — ao lado do LexLearn)
+
+Em produção o LexCorpus roda em container a partir DESTE repositório, via
+`docker-compose.crawler.yml` + `docker-compose.lexlearn.yml` (a ponte:
+nome de projeto fixo `lexcorpus` e a rede do LexLearn declarada como
+externa). O container monta o storage compartilhado em `/data` (definido
+por `LEXCORPUS_STORAGE_DIR`), então o `pasta_uri`
+(`file:///data/raw/exams/...`) resolve identicamente nos dois lados. O
+RabbitMQ é infra do LexLearn: o coletor só conecta no broker existente,
+não sobe um próprio.
+
+    # neste repo; a stack do LexLearn precisa estar de pé (o broker é dela)
+    export LEXCORPUS_STORAGE_DIR=../LexLearn/LexLearn-v3/data  # confira o caminho
+    docker compose -f docker-compose.crawler.yml -f docker-compose.lexlearn.yml \
+      build lexcorpus
+    docker compose -f docker-compose.crawler.yml -f docker-compose.lexlearn.yml \
+      run --rm lexcorpus crawl cebraspe -a slug=prf_21
+
+O serviço tem profile `crawler` (não sobe no `up` normal) e `restart: "no"`:
+crawl terminou, container morre. `LEXCORPUS_STORAGE_DIR` não tem default de
+propósito: sem ela o compose recusa, nomeando a variável. Suba a stack do
+LexLearn antes — o broker precisa estar de pé com uma fila vinculada ao
+exchange (não há `depends_on`: o broker é de outro projeto compose).
+
+## Configuração por ambiente
+
+O `settings.py` lê tudo de variáveis de ambiente (os defaults cobrem dev local
+e Docker). O `.env.example` (raiz) é o template — copie para `.env` (não
+versionado) e ajuste por ambiente; credenciais de produção ficam só lá:
+
+- `LEXCORPUS_FILES_STORE` — onde os PDFs são gravados (ver seção Storage)
+- `RABBIT_ENABLED` / `RABBIT_URL` — publicação de eventos v2.1 (broker do LexLearn)
+- `LEXPUBLI_RABBIT_URL` — broker do LexPubli: consumidor e respostas `document.*`
+- `EVENTOS_OUT_DIR` — pasta dos eventos em modo debug (`RABBIT_ENABLED=False`)
+- `LEXCORPUS_WATCHLIST` / `LEXCORPUS_STATE_FILE` — scheduler
+- `LEXCORPUS_STORAGE_DIR` — só compose (não é lida pelo settings.py):
+  diretório de storage compartilhado, montado em `/data` no container.
+  Sem default de propósito — ver "Rodar (modo container)"
 
 ## Storage (onde os PDFs são gravados)
 
@@ -78,6 +162,34 @@ definir nada (o default já aponta pra lá).
 
 O contrato (§7) mantém `pasta_uri` com esquema `file://` no evento, então o
 LexLearn resolve o ponteiro independentemente de onde o storage esteja montado.
+
+## Consultar o storage
+
+`lexcorpus/consulta.py` lista (ou copia) os PDFs já coletados, filtrando pelos
+metadados dos sidecars — sem baixar nada da rede:
+
+    python -m lexcorpus.consulta --banca cesgranrio
+    python -m lexcorpus.consulta --concurso bnb0124 --papel prova
+    python -m lexcorpus.consulta --cargo analista_bancario_1 --papel gabarito
+    python -m lexcorpus.consulta --banca fgv --copiar /tmp/selecao
+
+`--papel gabarito` abrange preliminar + definitivo; `--cargo` inclui os
+consolidados multi-cargo (`cargos: ["*"]`, contrato §5). O storage vem de
+`--store`, de `LEXCORPUS_FILES_STORE` ou do default Docker.
+
+## Ingestão manual (PDF obtido fora do crawler)
+
+Acervo antigo, banca sem spider, arquivo baixado à mão: descreva-o num
+manifesto em `manifestos/{banca}/{concurso}.yaml` (formato no docstring de
+`lexcorpus/ingestao_manual.py`; exemplo real: `manifestos/cebraspe/bacen13_analista.yaml`).
+O PDF entra pelos mesmos pipelines do crawler — sidecar, StateStore, evento.
+
+    python -m lexcorpus.ingestao_manual manifestos/cebraspe/bacen13_analista.yaml           # simula
+    python -m lexcorpus.ingestao_manual manifestos/cebraspe/bacen13_analista.yaml --gravar  # grava
+
+Sem `--gravar` nada é tocado. Com erro nenhum arquivo é gravado: recusa o
+conteúdo que já existe em outro concurso, a sobrescrita de um PDF diferente
+e o sidecar fora do schema.
 
 ## Descoberta por palavra-chave (ADR-0006)
 
@@ -107,6 +219,117 @@ Backends de busca: `--backend bing` (default, estável), `duckduckgo`,
 (ADR-0001: índice, nunca fonte de PDF) — o campo
 `confirmado_por_catálogo_do_órgão` indica que a banca+ano foram vistos em
 certames reais daquele órgão.
+
+## Concursos aprovados no LexPubli (ADR-0007)
+
+O LexPubli (portal público de concursos) publica `contest.discovery.created`
+quando a curadoria humana dele aprova um concurso, e `contest.discovery.updated`
+quando a curadoria muda um concurso já anunciado (banca, carreira, data da
+prova, status; o campo `changed` diz o quê). O **consumidor** recebe
+esse aviso e decide o que coletar, pela política versionada em
+`politica_coleta.yaml`: **o LexPubli avisa e o LexCorpus decide.**
+
+    python -m lexcorpus.consumidor                    # escuta a fila (LEXPUBLI_RABBIT_URL)
+    python -m lexcorpus.consumidor --arquivo ev.json  # processa um evento salvo (dev)
+    python -m lexcorpus.consumidor --sem-buscador     # só o concurso anunciado
+
+O que acontece com cada concurso aprovado:
+
+- **Catálogo:** entra em `vigentes`, com o `contest_id` do LexPubli.
+- **Concurso anunciado:** se a banca está em `bancas_validadas` e o alvo
+  sai das URLs oficiais do evento (ou da listagem pública da Cesgranrio),
+  vai para o **watchlist automático**, com o cron conforme a fase.
+- **Acervo (ADR-0008):** concursos **já coletados** da mesma banca e da mesma
+  carreira (`career`, da curadoria do LexPubli). Mesmo órgão e ano anterior
+  → `previous`; outro órgão → `related` (até `relacionados.max_por_alvo`).
+  A resposta `completed` sai na hora, **sem coleta nova**. O acervo antigo
+  ganha carreira pela marcação do operador:
+
+      python -m lexcorpus.catalogo carreira --concurso sefaz_ce_21 --carreira fiscal \
+          --organ Sefaz-CE --banca cebraspe --edital-ano 2021
+
+  A lista de carreiras é a do contrato (`schema/lexpubli/v1/common.schema.json`).
+  No Docker, o catálogo de estado (`/state/catalogo.yaml`) nasce como cópia
+  do `catalogo.yaml` versionado; depois disso, marque com
+  `LEXCORPUS_CATALOGO=/state/catalogo.yaml`.
+- **Atualizações:** banca nova → agenda o concurso atual; status novo → o
+  cron segue a fase; banca ou carreira nova → passa pelo acervo. Uma ligação
+  que já existe não gera resposta de novo.
+- **Certames anteriores:** o buscador (ADR-0006) propõe; a política filtra
+  (confirmação no catálogo do órgão, score mínimo, no máximo 3 certames).
+- **O que a política não resolve** vira `document.acquisition.awaiting_operator`
+  para o operador: banca sem spider, alvo não identificado, candidata fraca.
+- **Respostas** ao LexPubli no exchange `lexcorpus.events` **do broker do
+  LexPubli**: `document.acquisition.completed` (sai do pipeline, ao publicar
+  o concurso para o LexLearn), `.awaiting_operator` e `.failed`. O contrato
+  v2.1 não muda.
+
+**Dois brokers (LexPubli ADR-0005 §2a).** A automação LexPubli ↔ LexCorpus é
+a única do ecossistema e passa pelo broker **do LexPubli**
+(`LEXPUBLI_RABBIT_URL`, host `lexpubli-rabbitmq`, usuário `lexcorpus` de
+permissão mínima). O broker do LexLearn (`RABBIT_URL`) fica só com o v2.1
+(`concurso.*`). O LexLearn não recebe nada do LexPubli.
+
+Arquivos e caminhos:
+
+| O quê | Onde |
+| --- | --- |
+| Política | `politica_coleta.yaml` (versionada) |
+| Watchlist automático | `LEXCORPUS_WATCHLIST_AUTO` (default `state/watchlist.auto.yaml`; no Docker `/state`). **Gerado**: o `watchlist.yaml` manual continua soberano, e o scheduler ignora o alvo automático que repete um manual |
+| Contratos (cópia) | `schema/lexpubli/v1/`. O dono é o LexPubli; ver `schema/lexpubli/README.md` |
+| Catálogo do consumidor | `LEXCORPUS_CATALOGO` (no Docker `/state/catalogo.yaml`) |
+
+No container (o consumidor **não** monta `/data`, porque não toca em PDF):
+
+    docker compose -f docker-compose.crawler.yml -f docker-compose.lexpubli.yml \
+      --profile consumidor up -d consumidor
+
+O consumidor entra só na rede do broker do LexPubli, não na do LexLearn. Os
+crawls usam os dois overlays (`-f docker-compose.lexlearn.yml -f
+docker-compose.lexpubli.yml`): o v2.1 sai no broker do LexLearn e as
+respostas no do LexPubli.
+
+## Varredura por carreira (ADR-0009)
+
+O acervo cresce **antes** de o LexPubli anunciar um concurso. A carreira é o
+eixo da busca; a coleta continua nos spiders de banca.
+
+    scrapy crawl fgv -a descoberta=1                       # listagem oficial da FGV
+    python -m lexcorpus.varredura inventariar --banca fgv  # e --banca cesgranrio
+    python -m lexcorpus.varredura revisar --carreira fiscal
+    python -m lexcorpus.varredura revisar --carreira fiscal --confirmar fgv:sefazmt23,fgv:rfb22
+    python -m lexcorpus.varredura revisar --carreira tribunais --descartar fgv:psstjgo2025 \
+        --motivo "processo seletivo simplificado"
+
+- `carreiras_regras.yaml` (versionado) só **sugere** a carreira; o operador
+  confirma em lote. Carreiras ativas e teto em `politica_coleta.yaml`
+  (`varredura`): fiscal e tribunais, até 5 por banca, coleta semanal.
+- O confirmado entra no catálogo (com a carreira) e no
+  `watchlist.varredura.yaml` (gerado), que o scheduler lê junto com o manual
+  e o automático; o manual é soberano.
+- **Liberação escalonada:** cada confirmado ganha uma data `a_partir_de`, no
+  máximo `varredura.novos_por_semana` por semana, e o scheduler não o dispara
+  antes. Sem isso, um alvo novo é coletado na primeira passada, e o lote
+  inteiro entraria no LexLearn de uma vez. `python -m lexcorpus.varredura
+  agenda` mostra a escala.
+- **FGV:** para os sugeridos, a página oficial do concurso completa a
+  listagem: o **ano** (quando a página e os nomes dos PDFs concordam; se
+  divergem, o ano do **edital de abertura**, pelo nome do arquivo ou, em
+  última instância, pela 1ª página do PDF, lida em memória com o PyMuPDF,
+  o mesmo leitor do LexLearn), o **nome da pasta com o ano** (`tjba` ->
+  `tjba_2014`, via `-a concurso=`), um **alerta** quando os PDFs indicam
+  outra carreira (ex.: juiz num TJ) e **sem provas** quando a página não
+  tem prova nem gabarito (não pode ser confirmado). `--ano chave=AAAA`
+  corrige o ano na revisão.
+- **Cebraspe:** a API não lista eventos. `inventariar --banca cebraspe` lê a
+  listagem `/provas/cebraspe` do PCI **só como índice** (cargo, ano, órgão;
+  nunca PDF), agrupa por órgão e ano e, para os concursos com carreira
+  sugerida, sonda a API oficial pelo slug (`{sigla}_{aa}`, com o ano da prova
+  e o anterior). Slug com sufixo (ex.: `sefaz_al_19_auditor`) não se
+  adivinha: o operador informa na revisão, e a API confere antes de valer:
+
+      python -m lexcorpus.varredura revisar --carreira fiscal \
+          --slug cebraspe:pci/sefaz-rj-2025=SEFAZ_RJ_25_AUDITOR --confirmar cebraspe:pci/sefaz-rj-2025
 
 ## Catálogo dinâmico
 

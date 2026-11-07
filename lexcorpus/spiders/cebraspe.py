@@ -17,7 +17,9 @@ A API separa arquivos em:
 Classificação de papel vem da descricaoArquivo (confiável, não heurística):
   "GABARITO DEFINITIVO ..."  -> gabarito_definitivo
   "GABARITO PRELIMINAR ..."  -> gabarito_preliminar
-  "PROVA OBJETIVA ...", "PROVA DISCURSIVA ...", "PADRÃO DE RESPOSTA ..." -> prova
+  "PROVA OBJETIVA ..."  -> prova
+  "PROVA DISCURSIVA ...", "PADRÃO DE RESPOSTA ...", justificativas -> None
+                           (descartados: o LexLearn só trata objetivas)
 """
 from __future__ import annotations
 
@@ -26,6 +28,7 @@ import re
 
 import scrapy
 
+from ..heuristics import eh_discursivo
 from ..items import ArquivoItem
 from ..util import slugify
 
@@ -36,7 +39,7 @@ CDN_BASE = "https://cdn.cebraspe.org.br/concursos/{slug}/arquivos/{nome}"
 _RE_GAB_DEF = re.compile(r"gabarito\s+definitiv", re.I)
 _RE_GAB_PRE = re.compile(r"gabarito\s+preliminar", re.I)
 _RE_GAB = re.compile(r"gabarito", re.I)
-_RE_PROVA = re.compile(r"prova|padr[ãa]o\s+de\s+resposta|caderno", re.I)
+_RE_PROVA = re.compile(r"prova|caderno", re.I)
 
 
 def classificar_papel(descricao: str, nome: str) -> str | None:
@@ -45,6 +48,8 @@ def classificar_papel(descricao: str, nome: str) -> str | None:
     Retorna None se não for prova nem gabarito (ex.: edital que escapou).
     """
     alvo = f"{descricao} {nome}".lower()
+    if eh_discursivo(descricao, nome):
+        return None
     if _RE_GAB_DEF.search(alvo):
         return "gabarito_definitivo"
     if _RE_GAB_PRE.search(alvo):
@@ -54,6 +59,25 @@ def classificar_papel(descricao: str, nome: str) -> str | None:
     if _RE_PROVA.search(alvo):
         return "prova"
     return None  # não classificável como prova/gabarito
+
+
+# "Cargo 1: ..." no eventoCargos; "CARGO 1" / "CARGO_1_" na descrição ou no
+# nome. Os lookarounds (em vez de \b) aceitam o "_" dos nomes de arquivo e
+# impedem "CARGO 1" de casar com "CARGO 10"; "CARGOS 1 E 2" não casa.
+_RE_CARGO_NUM = re.compile(r"(?<![a-z])cargo[\s_]+(\d+)(?!\d)", re.I)
+
+
+def resolver_cargo(descricao: str, nome: str, por_numero: dict) -> str | None:
+    """Slug do cargo que o arquivo declara ("CARGO 2"), ou None.
+
+    A descrição tem prioridade; o nome do arquivo é reforço. Número que não
+    existe no eventoCargos -> None (não inventar).
+    """
+    for alvo in (descricao, nome):
+        m = _RE_CARGO_NUM.search(alvo or "")
+        if m:
+            return por_numero.get(int(m.group(1)))
+    return None
 
 
 class CebraspeSpider(scrapy.Spider):
@@ -104,18 +128,22 @@ class CebraspeSpider(scrapy.Spider):
 
         # cargos do concurso (rótulo cru -> slug)
         cargos_rotulo = {}
+        por_numero = {}  # "Cargo 2: ..." -> {2: slug}
         for c in dados.get("eventoCargos", []):
             area = c.get("area", "")
             # "Cargo 1: POLICIAL RODOVIÁRIO FEDERAL - Subsídio..." -> pega o miolo
             m = re.search(r":\s*(.+?)(?:\s*-\s*Subs[íi]dio|\s*-\s*R\$|$)", area)
             nome_cargo = (m.group(1).strip() if m else area.strip()) or "geral"
             cargos_rotulo[slugify(nome_cargo)] = nome_cargo
+            num = re.match(r"\s*cargo\s+(\d+)\s*:", area, re.I)
+            if num:
+                por_numero[int(num.group(1))] = slugify(nome_cargo)
         if not cargos_rotulo:
             cargos_rotulo = {"geral": "Geral"}
         cargos_slugs = list(cargos_rotulo.keys())
 
-        # A API não amarra arquivo->cargo; o concurso PRF é cargo único.
-        # Para concursos multi-cargo, cargos_slugs terá vários; marcamos todos.
+        # A API não amarra arquivo->cargo num campo; a descrição sim
+        # ("PROVA OBJETIVA - CARGO 2"). Ver resolver_cargo.
         multi = len(cargos_slugs) > 1
 
         arquivos = dados.get("arquivosGabarito", [])
@@ -145,9 +173,20 @@ class CebraspeSpider(scrapy.Spider):
             item["concurso_rotulo"] = concurso_rotulo
             item["cargos_rotulo"] = cargos_rotulo
             item["papel"] = papel
-            item["cargos"] = cargos_slugs if multi else [cargos_slugs[0]]
+            # Cargo declarado -> só ele. Sem cargo num concurso multi-cargo ->
+            # cobre todos; o GABARITO pode vir subdividido por caderno (ex.:
+            # gab_definitivo_todos_cargos do BACEN13), a PROVA é um caderno só.
+            cargo = resolver_cargo(desc, nome, por_numero) if multi else None
+            if cargo:
+                item["cargos"] = [cargo]
+                item["multi_cargo"] = False
+            elif multi:
+                item["cargos"] = cargos_slugs
+                item["multi_cargo"] = papel != "prova"
+            else:
+                item["cargos"] = [cargos_slugs[0]]
+                item["multi_cargo"] = False
             item["tipo_prova"] = None
-            item["multi_cargo"] = multi
             item["vigente"] = True
             self.logger.info("PDF [%s]: %s", papel, nome)
             n += 1

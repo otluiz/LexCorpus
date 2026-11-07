@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lex/lexpubli/events/v1/contest.discovery.created.schema.json",
+  "title": "contest.discovery.created - v1.1",
+  "description": "Um concurso foi descoberto E aprovado pela curadoria do LexPubli. Descobertas pendentes ou rejeitadas não geram evento. Consumidor previsto: LexCorpus (entra no catálogo de vigentes). v1.1: career e exam_date (opcionais).",
+  "allOf": [
+    {
+      "$ref": "https://lex/lexpubli/events/v1/envelope.schema.json"
+    },
+    {
+      "properties": {
+        "event_type": {
+          "const": "contest.discovery.created"
+        },
+        "event_version": {
+          "pattern": "^1\\.[0-9]+$"
+        },
+        "data": {
+          "$ref": "#/$defs/data"
+        },
+        "producer": {
+          "pattern": "^lexpubli(/[a-z0-9_.-]+)?$"
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "data": {
+      "allOf": [
+        {
+          "$ref": "https://lex/lexpubli/events/v1/common.schema.json#/$defs/contest"
+        }
+      ],
+      "type": "object",
+      "required": [
+        "discovery_id",
+        "source_url"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "contest_id": true,
+        "contest_slug": true,
+        "title": true,
+        "organ": true,
+        "exam_board": true,
+        "year": true,
+        "status": true,
+        "career": true,
+        "exam_date": true,
+        "positions": true,
+        "registration": true,
+        "edital_url": true,
+        "page_url": true,
+        "source_url": true,
+        "discovery_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "A descoberta aprovada que originou o evento."
+        }
+      }
+    }
+  }
+}

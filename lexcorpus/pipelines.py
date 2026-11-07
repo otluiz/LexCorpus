@@ -3,35 +3,103 @@
 Cadeia (ordem em ITEM_PIPELINES):
   100  LexCorpusFilesPipeline  -> baixa o PDF para a pasta plana {banca}/{concurso}/
   200  SidecarPipeline         -> calcula SHA-256, escreve {nome}.meta.json atômico
-  300  EventoRabbitPipeline    -> agrega por concurso e publica concurso.disponivel
+  300  EventoRabbitPipeline    -> agrega por concurso, compara com o StateStore
+                                 (§6.11) e publica concurso.disponivel /
+                                 concurso.atualizado — ou nada, se nada mudou
 
 Princípios do contrato honrados aqui:
   §6.1  salvar PDF + sidecar ANTES de publicar o evento
   §6.2  escrita atômica (.tmp -> rename)
   §6.3  checksum SHA-256 do arquivo final
   §6.9  pasta plana, sem subpastas
+  §6.11 ciclo preliminar->definitivo via StateStore (lexcorpus/statestore.py)
   §7    ponteiro é URI com esquema (file://)
+  §4    versão emitida = LEXCORPUS_CONTRATO_VERSAO (2.0 | 2.1); em 2.0 o
+        campo `caderno` (novo na 2.1) é retirado da saída
 """
 from __future__ import annotations
 
 import os
 import json
+import hashlib
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
 from itemadapter import ItemAdapter
 from scrapy.exceptions import DropItem
-from scrapy.pipelines.files import FilesPipeline
+from scrapy.pipelines.files import FileException, FilesPipeline
 
+from .heuristics import eh_discursivo
+from .statestore import StateStore
 from .util import sha256_file, atomic_write_bytes
+
+
+VERSOES_CONTRATO = ("2.0", "2.1")
+
+
+def versao_contrato(settings) -> str:
+    versao = settings.get("LEXCORPUS_CONTRATO_VERSAO", "2.0")
+    if versao not in VERSOES_CONTRATO:
+        raise ValueError(f"LEXCORPUS_CONTRATO_VERSAO={versao!r}; "
+                         f"aceitas: {', '.join(VERSOES_CONTRATO)}")
+    return versao
+
+
+def ajustar_a_versao(arq: dict, versao: str) -> dict:
+    """Retira do arquivo (evento ou sidecar) o que a versão não conhece.
+
+    2.0 não tem `caderno`: sai do arquivo e dos segmentos; segmento que só
+    tinha caderno (sem cargo) seria inválido em 2.0 e é descartado.
+    """
+    if versao != "2.0":
+        return arq
+    arq.pop("caderno", None)
+    if arq.get("segmentos"):
+        segs = [{k: v for k, v in s.items() if k != "caderno"}
+                for s in arq["segmentos"] if s.get("cargo")]
+        if segs:
+            arq["segmentos"] = segs
+        else:
+            del arq["segmentos"]
+    return arq
 
 
 # ---------------------------------------------------------------------------
 # 1. Download — FilesPipeline customizado
 # ---------------------------------------------------------------------------
+class FiltroObjetivasPipeline:
+    """Rede de segurança ANTES do download: material discursivo (padrão de
+    resposta, prova discursiva, justificativa...) não entra no storage do
+    LexLearn, qualquer que seja o spider. Depois do download seria tarde:
+    sobraria um PDF sem sidecar na pasta do concurso."""
+
+    def process_item(self, item, spider):
+        adapter = ItemAdapter(item)
+        urls = " ".join(adapter.get("file_urls") or [])
+        if eh_discursivo(adapter.get("nome") or "", adapter.get("fonte_url") or "", urls):
+            raise DropItem(f"discursivo, fora do escopo (só objetivas): {adapter.get('nome')}")
+        return item
+
+
 class LexCorpusFilesPipeline(FilesPipeline):
-    """Baixa o PDF preservando o nome original numa pasta plana por concurso."""
+    """Baixa o PDF preservando o nome original numa pasta plana por concurso.
+
+    GATE ADMINISTRATIVO DE EXPIRAÇÃO: arquivo já baixado cuja idade passa de
+    FILES_EXPIRES NÃO é rebaixado automaticamente (o default do Scrapy seria
+    sobrescrever em cima). Provas são o acervo do LexLearn — re-download que
+    substitui arquivo existente é decisão do administrador. O pipeline mantém
+    o arquivo antigo, trata como "uptodate" e loga WARNING com a instrução.
+    Para autorizar o re-download dos expirados num crawl:
+        scrapy crawl X -s LEXCORPUS_REBAIXAR_EXPIRADOS=True
+
+    GUARDA DE DUPLICATA ENTRE CONCURSOS: o mesmo PDF (mesmo SHA-256) já
+    registrado no StateStore sob OUTRO concurso é recusado antes de ir ao
+    disco — o LexLearn aproveita PDF solto na pasta, então não basta deixar
+    de escrever o sidecar. Caso real: gab_definitivo_todos_cargos-1.pdf do
+    BACEN13 copiado para a pasta do SERPRO13. O item segue sem 'files' e o
+    SidecarPipeline o descarta: sem sidecar, sem evento.
+    """
 
     def file_path(self, request, response=None, info=None, *, item=None):
         adapter = ItemAdapter(item)
@@ -40,17 +108,64 @@ class LexCorpusFilesPipeline(FilesPipeline):
         nome = adapter.get("nome") or request.url.rsplit("/", 1)[-1]
         return f"{banca}/{concurso}/{nome}"
 
+    def file_downloaded(self, response, request, info, *, item=None):
+        adapter = ItemAdapter(item)
+        checksum = hashlib.sha256(response.body).hexdigest()
+        db = info.spider.settings.get("LEXCORPUS_STATE_DB",
+                                      "state/lexcorpus_state.db")
+        with StateStore(db) as store:
+            outros = [a for a in store.buscar_por_checksum(checksum)
+                      if (a["banca"], a["concurso"])
+                      != (adapter["banca"], adapter["concurso"])]
+        if outros:
+            onde = ", ".join(f"{a['banca']}/{a['concurso']}/{a['nome']}"
+                             for a in outros)
+            info.spider.logger.error(
+                "DUPLICATA recusada: %s já existe em %s (sha256 %s…)",
+                request.url, onde, checksum[:12])
+            self.inc_stats("duplicado_entre_concursos")
+            raise FileException(f"duplicado entre concursos: {onde}")
+        return super().file_downloaded(response, request, info, item=item)
+
+    def _onsuccess(self, result, request, info, path):
+        file_info = super()._onsuccess(result, request, info, path)
+        if file_info is not None or not result or not result.get("last_modified"):
+            # uptodate normal, ou arquivo inexistente (download legítimo)
+            return file_info
+        # chegou aqui: o arquivo EXISTE mas está "expirado" — o Scrapy
+        # rebaixaria e sobrescreveria. Segurar para o administrador decidir.
+        if info.spider.settings.getbool("LEXCORPUS_REBAIXAR_EXPIRADOS", False):
+            info.spider.logger.warning(
+                "re-download autorizado (LEXCORPUS_REBAIXAR_EXPIRADOS): %s", path
+            )
+            return None
+        info.spider.logger.warning(
+            "arquivo expirado MANTIDO (decisão pendente do administrador): %s "
+            "— para rebaixar e substituir, rode o crawl com "
+            "-s LEXCORPUS_REBAIXAR_EXPIRADOS=True",
+            path,
+        )
+        self.inc_stats("expirado_mantido")
+        return {
+            "url": request.url,
+            "path": path,
+            "checksum": result.get("checksum"),
+            "status": "uptodate",
+        }
+
 
 # ---------------------------------------------------------------------------
 # 2. Sidecar — checksum + .meta.json atômico
 # ---------------------------------------------------------------------------
 class SidecarPipeline:
-    def __init__(self, store_root: str):
+    def __init__(self, store_root: str, versao: str = "2.0"):
         self.store_root = Path(store_root)
+        self.versao = versao
 
     @classmethod
     def from_crawler(cls, crawler):
-        return cls(store_root=crawler.settings.get("FILES_STORE"))
+        return cls(store_root=crawler.settings.get("FILES_STORE"),
+                   versao=versao_contrato(crawler.settings))
 
     def process_item(self, item, spider):
         adapter = ItemAdapter(item)
@@ -69,7 +184,7 @@ class SidecarPipeline:
         adapter["tamanho_bytes"] = tamanho
         adapter["caminho_local"] = str(abs_path)
 
-        sidecar = self._build_sidecar(adapter)
+        sidecar = self._build_sidecar(adapter, self.versao)
         destino = abs_path.parent / f"{nome}.meta.json"
         atomic_write_bytes(
             destino, json.dumps(sidecar, ensure_ascii=False, indent=2).encode("utf-8")
@@ -77,7 +192,7 @@ class SidecarPipeline:
         return item
 
     @staticmethod
-    def _build_sidecar(adapter) -> dict:
+    def _build_sidecar(adapter, versao: str = "2.0") -> dict:
         rotulos = {}
         if adapter.get("banca_rotulo"):
             rotulos["banca"] = adapter["banca_rotulo"]
@@ -87,7 +202,7 @@ class SidecarPipeline:
             rotulos["cargos"] = adapter["cargos_rotulo"]
 
         sc = {
-            "schema_version": "2.0",
+            "schema_version": versao,
             "arquivo": adapter["nome"],
             "papel": adapter["papel"],
             "cargos": adapter["cargos"],
@@ -98,10 +213,13 @@ class SidecarPipeline:
                 "fonte_url": adapter["fonte_url"],
                 "raspado_em": datetime.now(timezone.utc).isoformat(),
                 "scraper_versao": "lexcorpus/0.1",
+                **(adapter.get("origem_extra") or {}),
             },
         }
         if adapter.get("tipo_prova") is not None:
             sc["tipo_prova"] = adapter["tipo_prova"]
+        if adapter.get("caderno"):
+            sc["caderno"] = adapter["caderno"]
         if adapter.get("multi_cargo"):
             sc["multi_cargo"] = True
         if adapter.get("segmentos"):
@@ -112,7 +230,7 @@ class SidecarPipeline:
             sc["substituido_por"] = adapter["substituido_por"]
         if rotulos:
             sc["rotulos"] = rotulos
-        return sc
+        return ajustar_a_versao(sc, versao)
 
 
 # ---------------------------------------------------------------------------
@@ -124,10 +242,20 @@ class EventoRabbitPipeline:
         self.uri_scheme = settings.get("STORAGE_URI_SCHEME", "file://")
         self.rabbit_enabled = settings.getbool("RABBIT_ENABLED", False)
         self.exchange = settings.get("RABBIT_EXCHANGE", "lexcorpus.events")
-        self.routing_key = settings.get("RABBIT_ROUTING_DISPONIVEL", "concurso.disponivel")
+        self.routing_disponivel = settings.get(
+            "RABBIT_ROUTING_DISPONIVEL", "concurso.disponivel")
+        self.routing_atualizado = settings.get(
+            "RABBIT_ROUTING_ATUALIZADO", "concurso.atualizado")
         self.rabbit_url = settings.get("RABBIT_URL", "amqp://guest:guest@localhost:5672/")
+        # respostas ao LexPubli: broker DELE, conexão aberta só se houver resposta
+        self.lexpubli_url = settings.get("LEXPUBLI_RABBIT_URL", "")
+        self.lexpubli_exchange = settings.get("LEXPUBLI_RESPOSTA_EXCHANGE", "lexcorpus.events")
+        self._conn_lexpubli = None
         self.out_dir = settings.get("EVENTOS_OUT_DIR", "eventos_debug")
+        self.state_db = settings.get("LEXCORPUS_STATE_DB", "state/lexcorpus_state.db")
+        self.versao = versao_contrato(settings)
         self._por_concurso = {}
+        self._store = None        # StateStore, aberto lazy em open_spider
         self._conn = None
         self._channel = None
 
@@ -136,6 +264,7 @@ class EventoRabbitPipeline:
         return cls(crawler.settings)
 
     def open_spider(self, spider):
+        self._store = StateStore(self.state_db)
         if not self.rabbit_enabled:
             return
         import pika
@@ -173,21 +302,154 @@ class EventoRabbitPipeline:
             "checksum_sha256": adapter["checksum_sha256"],
             "tamanho_bytes": adapter["tamanho_bytes"],
         }
-        for opc in ("tipo_prova", "multi_cargo", "segmentos", "vigente", "substituido_por"):
+        for opc in ("tipo_prova", "caderno", "multi_cargo", "segmentos",
+                    "vigente", "substituido_por"):
             if adapter.get(opc) is not None:
                 arq[opc] = adapter[opc]
-        entrada["arquivos"].append(arq)
+        entrada["arquivos"].append(ajustar_a_versao(arq, self.versao))
         return item
 
     def close_spider(self, spider):
-        for chave, dados in self._por_concurso.items():
-            evento = self._build_evento(dados)
-            self._publish(evento, spider)
-        if self._conn is not None:
-            self._conn.close()
+        try:
+            for chave, dados in self._por_concurso.items():
+                self._fechar_concurso(dados, spider)
+        finally:
+            if self._store is not None:
+                self._store.close()
+            if self._conn is not None:
+                self._conn.close()
+            if self._conn_lexpubli is not None and self._conn_lexpubli.is_open:
+                self._conn_lexpubli.close()
 
-    def _build_evento(self, dados):
-       # pasta_uri = f"{self.uri_scheme}{Path(self.files_store).resolve()}/{dados['banca']}/{dados['concurso']}/"
+    # -- diff contra o StateStore (§6.11) -------------------------------------
+
+    def _fechar_concurso(self, dados, spider):
+        """Decide o destino do concurso: disponivel / atualizado / silêncio.
+
+        - concurso nunca visto      -> concurso.disponivel (como sempre foi)
+        - arquivos novos/mudados ou
+          preliminar arquivado       -> concurso.atualizado (lista completa)
+        - nada mudou                 -> não publica nada (idempotência do
+                                        produtor: re-run diário é gratuito)
+        """
+        banca, concurso = dados["banca"], dados["concurso"]
+        atuais = {a["nome"]: a for a in dados["arquivos"]}
+        # o discursivo coletado antes do filtro não volta a ser listado
+        anteriores = {n: r for n, r in self._store.carregar_concurso(banca, concurso).items()
+                      if not eh_discursivo(n)}
+
+        if not anteriores:
+            self._store.upsert_arquivos(
+                [self._row(banca, concurso, a) for a in dados["arquivos"]])
+            evento = self._build_evento(dados, "concurso.disponivel",
+                                        dados["arquivos"])
+            self._publish(evento, spider)
+            return
+
+        # arquivos novos ou com conteúdo alterado (checksum mudou)
+        novos = [n for n, a in atuais.items()
+                 if n not in anteriores
+                 or anteriores[n]["checksum_sha256"] != a["checksum_sha256"]]
+
+        # transições preliminar -> definitivo (Caso D do contrato)
+        transicoes = self._detectar_transicoes(atuais, anteriores)
+
+        if not novos and not transicoes:
+            self._store.upsert_arquivos(
+                [self._row(banca, concurso, a) for a in dados["arquivos"]])
+            spider.logger.info("sem mudanças, nada publicado: %s", concurso)
+            return
+
+        # arquivar os preliminares substituídos (estado + sidecar no storage)
+        for nome_pre, nome_def in transicoes.items():
+            self._store.arquivar_preliminar(banca, concurso, nome_pre, nome_def)
+            self._regravar_sidecar_arquivado(banca, concurso, nome_pre,
+                                             nome_def, spider)
+        self._store.upsert_arquivos(
+            [self._row(banca, concurso, a) for a in dados["arquivos"]])
+
+        # evento carrega a lista COMPLETA do concurso (schema, linha 50):
+        # crawl atual ∪ rows do estado ausentes deste crawl (ex.: preliminar
+        # que a banca tirou do ar), com os overrides de vigente aplicados
+        completa = list(dados["arquivos"])
+        for a in completa:
+            if a["nome"] in transicoes:
+                a["vigente"] = False
+                a["substituido_por"] = transicoes[a["nome"]]
+        for nome, row in anteriores.items():
+            if nome in atuais:
+                continue
+            completa.append({
+                "nome": nome,
+                "papel": row["papel"],
+                "cargos": row["cargos"],
+                "checksum_sha256": row["checksum_sha256"],
+                "tamanho_bytes": row["tamanho_bytes"],
+                "vigente": False if nome in transicoes else row["vigente"],
+                "substituido_por": transicoes.get(nome) or row["substituido_por"],
+            })
+        evento = self._build_evento(dados, "concurso.atualizado", completa)
+        self._publish(evento, spider)
+        spider.logger.info(
+            "concurso atualizado: %s (%d novos, %d preliminares arquivados)",
+            concurso, len(novos), len(transicoes))
+
+    @staticmethod
+    def _row(banca, concurso, arq):
+        """Arquivo agregado pelo pipeline -> row do StateStore."""
+        return {
+            "banca": banca, "concurso": concurso, "nome": arq["nome"],
+            "papel": arq["papel"], "cargos": arq["cargos"],
+            "tipo_prova": arq.get("tipo_prova"),
+            "checksum_sha256": arq["checksum_sha256"],
+            "tamanho_bytes": arq["tamanho_bytes"],
+            "vigente": arq.get("vigente", True),
+            "substituido_por": arq.get("substituido_por"),
+        }
+
+    @staticmethod
+    def _mesma_prova(pre_row, def_arq) -> bool:
+        """O definitivo cobre o preliminar? Interseção de cargos (["*"] cobre
+        tudo) + tipo_prova igual quando ambos declaram."""
+        cargos_pre, cargos_def = set(pre_row["cargos"]), set(def_arq["cargos"])
+        if "*" not in cargos_pre and "*" not in cargos_def \
+                and not (cargos_pre & cargos_def):
+            return False
+        tp_pre, tp_def = pre_row["tipo_prova"], def_arq.get("tipo_prova")
+        return tp_pre is None or tp_def is None or tp_pre == tp_def
+
+    def _detectar_transicoes(self, atuais, anteriores) -> dict:
+        """{nome do preliminar: nome do definitivo} a arquivar neste crawl."""
+        definitivos = [a for a in atuais.values()
+                       if a["papel"] == "gabarito_definitivo"]
+        transicoes = {}
+        for nome, row in anteriores.items():
+            if row["papel"] != "gabarito_preliminar" or not row["vigente"]:
+                continue
+            for d in definitivos:
+                if self._mesma_prova(row, d):
+                    transicoes[nome] = d["nome"]
+                    break
+        return transicoes
+
+    def _regravar_sidecar_arquivado(self, banca, concurso, nome_pre,
+                                    nome_def, spider):
+        """Atualiza o .meta.json do preliminar no storage (só metadado — o
+        PDF nunca é tocado; histórico é propriedade, não lugar — Caso D)."""
+        sidecar = (Path(self.files_store) / banca / concurso
+                   / f"{nome_pre}.meta.json")
+        try:
+            dados = json.loads(sidecar.read_text(encoding="utf-8"))
+        except OSError as exc:
+            spider.logger.warning("sidecar do preliminar ilegível (%s): %s",
+                                  sidecar, exc)
+            return
+        dados["vigente"] = False
+        dados["substituido_por"] = nome_def
+        atomic_write_bytes(
+            sidecar, json.dumps(dados, ensure_ascii=False, indent=2).encode("utf-8"))
+
+    def _build_evento(self, dados, tipo, arquivos):
         pasta_uri = f"{self.uri_scheme}{os.path.abspath(self.files_store)}/{dados['banca']}/{dados['concurso']}/"
         rot = {}
         if dados["rotulos"].get("banca"):
@@ -197,14 +459,14 @@ class EventoRabbitPipeline:
         if dados["rotulos"].get("cargos"):
             rot["cargos"] = dados["rotulos"]["cargos"]
         evento = {
-            "schema_version": "2.0",
-            "event": "concurso.disponivel",
+            "schema_version": self.versao,
+            "event": tipo,
             "event_id": str(uuid.uuid4()),
             "produced_at": datetime.now(timezone.utc).isoformat(),
             "banca": dados["banca"],
             "concurso": dados["concurso"],
             "pasta_uri": pasta_uri,
-            "arquivos": dados["arquivos"],
+            "arquivos": arquivos,
         }
         if dados.get("fonte_url"):
             evento["fonte_url"] = dados["fonte_url"]
@@ -214,11 +476,14 @@ class EventoRabbitPipeline:
 
     def _publish(self, evento, spider):
         payload = json.dumps(evento, ensure_ascii=False).encode("utf-8")
+        routing_key = (self.routing_disponivel
+                       if evento["event"] == "concurso.disponivel"
+                       else self.routing_atualizado)
         if self.rabbit_enabled and self._channel is not None:
             import pika
             self._channel.basic_publish(
                 exchange=self.exchange,
-                routing_key=self.routing_key,
+                routing_key=routing_key,
                 body=payload,
                 properties=pika.BasicProperties(
                     delivery_mode=2,
@@ -226,11 +491,64 @@ class EventoRabbitPipeline:
                 ),
             )
             spider.logger.info(
-                "evento publicado: %s (%s arquivos)",
-                evento["concurso"], len(evento["arquivos"]),
+                "evento publicado: %s %s (%s arquivos)",
+                evento["event"], evento["concurso"], len(evento["arquivos"]),
             )
         else:
             out = Path(self.out_dir)
             out.mkdir(parents=True, exist_ok=True)
             (out / f"{evento['concurso']}.json").write_bytes(payload)
-            spider.logger.info("evento (dev) gravado: %s", evento["concurso"])
+            spider.logger.info("evento (dev) gravado: %s (%s)",
+                               evento["concurso"], evento["event"])
+        self._responder_lexpubli(evento, spider)
+
+    def _canal_lexpubli(self):
+        """Canal no broker do LexPubli (não no do LexLearn). None = dev:
+        o Respondedor grava as respostas em disco."""
+        if not self.lexpubli_url:
+            return None
+        if self._conn_lexpubli is None:
+            import pika
+            self._conn_lexpubli = pika.BlockingConnection(
+                pika.URLParameters(self.lexpubli_url))
+        return self._conn_lexpubli.channel()
+
+    def _responder_lexpubli(self, evento, spider):
+        """ADR-0007: se este concurso atende a concursos anunciados pelo
+        LexPubli (aquisicao_lexpubli), responde document.acquisition.completed
+        com as contagens VIGENTES por papel.
+
+        Nunca derruba o contrato principal: o evento concurso.* para o
+        LexLearn já saiu; uma falha aqui só é registrada no log.
+        """
+        if self._store is None:
+            return
+        banca, concurso = evento["banca"], evento["concurso"]
+        aquisicoes = self._store.aquisicoes_de(banca, concurso)
+        if not aquisicoes:
+            return
+        from .respostas import Respondedor
+
+        contagem = self._store.contagem_vigentes(banca, concurso) or {}
+        cargos = [c for a in evento["arquivos"] if a.get("vigente", True)
+                  for c in a.get("cargos", [])]
+        rotulo = ((evento.get("extra") or {}).get("rotulos") or {}).get("banca")
+        try:
+            canal = self._canal_lexpubli()
+        except Exception:
+            spider.logger.exception("broker do LexPubli inacessível; respostas de %s/%s "
+                                    "não enviadas", banca, concurso)
+            return
+        respondedor = Respondedor(channel=canal, exchange=self.lexpubli_exchange,
+                                  out_dir=self.out_dir)
+        for aq in aquisicoes:
+            try:
+                respondedor.completed(
+                    contest_id=aq["contest_id"], correlation_id=aq["correlation_id"],
+                    relation=aq["relation"], banca=banca, concurso=concurso,
+                    contagem=contagem, ano=aq["ano"], banca_rotulo=rotulo,
+                    cargos=cargos, fonte_url=evento.get("fonte_url"))
+            except Exception:
+                spider.logger.exception(
+                    "resposta ao LexPubli falhou (%s/%s, contest %s)",
+                    banca, concurso, aq["contest_id"])

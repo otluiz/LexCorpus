@@ -1,0 +1,20 @@
+# docker-compose.lexlearn.yml — a ponte para a stack do LexLearn
+#
+# Use SEMPRE junto do docker-compose.crawler.yml, e SEMPRE por último:
+#   docker compose -f docker-compose.crawler.yml -f docker-compose.lexlearn.yml ...
+#
+# São duas linhas de conteúdo e as duas importam:
+
+# O NOME DO PROJETO, fixo. Sem ele o compose usa o nome do DIRETÓRIO, e o
+# volume de estado muda de nome junto — o coletor perderia a memória do que já
+# viu e republicaria tudo como novo, sem avisar. Com o nome fixo o StateStore
+# é sempre `lexcorpus_lexcorpus-state`.
+name: lexcorpus
+
+# A REDE do projeto do LexLearn, como externa. É o que faz `rabbitmq` resolver
+# para o broker DELE — o único que tem uma fila vinculada ao exchange, porque
+# quem consome os eventos é o worker de lá.
+networks:
+  default:
+    name: lexlearn-v3_default
+    external: true

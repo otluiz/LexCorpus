@@ -1,6 +1,6 @@
 # Contrato de Entrega — LexCorpus → LexLearn
 
-**Versão do contrato:** 2.0 · **Status:** rascunho para revisão conjunta
+**Versão do contrato:** 2.1 · **Status:** rascunho para revisão conjunta
 
 Este documento define **o que o LexCorpus entrega e como**. É o único ponto de acordo entre
 os dois sistemas. Enquanto o LexCorpus respeitar este contrato, os dois projetos evoluem de
@@ -11,6 +11,11 @@ LexLearn**.
 > múltiplos cargos por concurso, múltiplos tipos de prova por cargo, gabaritos que cobrem
 > vários cargos num arquivo só, e o ciclo de vida preliminar→definitivo. Toda essa
 > estrutura vive no **metadado**, não em subpastas.
+>
+> **Novidade da v2.1:** campo opcional `caderno` — o código que a banca imprime no
+> PDF (ex.: `BACEN13_002_04`), no arquivo e nos `segmentos`. Na Cebraspe é ele, não o
+> rótulo do cargo, que casa a prova com o bloco do gabarito (ver Caso E). A mudança é
+> aditiva: um evento 2.0 continua válido no schema 2.1. Implantação em §4.
 
 ---
 
@@ -23,6 +28,14 @@ O LexCorpus raspa **provas e gabaritos** de concursos públicos e os entrega por
 
 Padrão **Claim Check**: o binário nunca viaja dentro da mensagem. Os dois sistemas não se
 conhecem como código; a fila é um intermediário anônimo.
+
+> **Nota de fronteira (13/10/2026, sem mudança de versão):** este contrato é o **único
+> canal automático** que chega ao LexLearn. Os eventos LexPubli × LexCorpus
+> (`contest.discovery.*`, `document.acquisition.*`) ficam entre esses dois projetos; o
+> LexLearn não os assina. Uma coleta disparada por um concurso que o LexPubli descobriu
+> chega aqui como qualquer outra: alimenta o acervo e o DNA das bancas. A **geração de
+> questões** no LexLearn não é disparada por este contrato: é por demanda, decidida pelo
+> Administrador do LexLearn.
 
 ---
 
@@ -61,7 +74,8 @@ Cada arquivo declara, no evento e no sidecar:
 | `cargos` | **lista** de cargos que o arquivo cobre | `["geografia"]`, `["geografia","ingles","informatica"]`, `["*"]` |
 | `tipo_prova` | versão quando a banca embaralha | `"1"`, `"amarela"`, ou `null` |
 | `multi_cargo` | um arquivo com vários cargos dentro | `true`/`false` |
-| `segmentos` | (opcional) onde cada cargo está no arquivo multi-cargo | ver §5 |
+| `segmentos` | (opcional) onde cada cargo/caderno está no arquivo multi-cargo | ver §5 |
+| `caderno` | (opcional, v2.1) código do caderno como impresso no PDF | `"BACEN13_002_04"` |
 | `vigente` | ciclo de vida do gabarito | `true` (atual) / `false` (preliminar arquivado) |
 | `substituido_por` | (opcional) o definitivo que substituiu um preliminar | nome do arquivo |
 
@@ -105,7 +119,20 @@ barra fecha a porta a *path traversal* (`../`) na resolução `pasta_uri + "/" +
   valida antes de usar.
 - Evento na fila: exchange `lexcorpus.events` (topic), routing keys `concurso.disponivel` e
   `concurso.atualizado`. **Um evento por concurso**, com a lista plana de arquivos. Validado
-  por `schema/evento.schema.json`. `schema_version` = `"2.0"`.
+  por `schema/evento.schema.json`. `schema_version` = `"2.0"` ou `"2.1"`.
+
+### Implantação de uma versão nova: o consumidor primeiro
+
+O schema é do LexCorpus (dono), mas o LexLearn valida com a **cópia** que carrega. Uma
+versão nova só pode ser emitida depois que o LexLearn tiver a cópia nova — senão ele
+recusa tudo. Por isso a versão emitida é configuração, não código:
+
+1. O LexCorpus publica o schema novo (aceita a versão antiga e a nova).
+2. O LexLearn atualiza a cópia e confirma.
+3. O LexCorpus liga a versão nova: `LEXCORPUS_CONTRATO_VERSAO=2.1`.
+
+Até o passo 3, o LexCorpus emite `2.0` e retira da saída o que a 2.0 não conhece
+(`caderno`; e o segmento que só tinha `caderno`).
 
 ---
 
@@ -180,6 +207,31 @@ LexCorpus publica `concurso.atualizado` e marca o preliminar:
 
 Ambos ficam na mesma pasta. "Histórico" é uma propriedade (`vigente: false`), não um lugar.
 
+### Caso E — o código do caderno casa prova e gabarito (ex.: cebraspe, v2.1)
+
+Na Cebraspe o rótulo não identifica o cargo ("Analista - Área 1" e "Técnico - Área 1";
+blocos de conhecimentos básicos que servem várias áreas). O que identifica é o código do
+caderno, impresso no cabeçalho da prova (`||BACEN13_002_04N800189||`) e sozinho na linha,
+no topo de cada página do gabarito "todos os cargos":
+
+```json
+// a prova
+{ "papel": "prova", "cargos": ["analista_area_2"], "caderno": "BACEN13_002_04" }
+
+// o gabarito: um bloco por caderno; basta cargo OU caderno em cada segmento
+{ "papel": "gabarito_definitivo", "cargos": ["*"], "multi_cargo": true,
+  "segmentos": [
+    { "caderno": "BACEN13_001_01", "pagina_inicio": 1, "pagina_fim": 1 },
+    { "caderno": "BACEN13_002_04", "pagina_inicio": 2, "pagina_fim": 2 }
+  ] }
+```
+
+`caderno` é o código **como impresso no PDF** (sem o sufixo de controle `N...`), só letras,
+dígitos, `_` e `-`. **Não se deriva do nome do arquivo:** às vezes coincide (BACEN 2013),
+às vezes não (PRF 2021: prova `633_PRF_CF_001.PDF`, gabarito `MATRIZ_633_PRF_001_00`).
+Sem leitura do PDF ou declaração explícita, omite — o LexLearn continua extraindo o código
+por conta própria.
+
 ---
 
 ## 6. Regras obrigatórias (garantias que o LexLearn assume)
@@ -191,12 +243,17 @@ Ambos ficam na mesma pasta. "Histórico" é uma propriedade (`vigente: false`), 
 5. Declare `papel`, `cargos` (lista), e — quando aplicável — `tipo_prova`, `multi_cargo`,
    `vigente`.
 6. Nunca coloque binário na mensagem.
-7. Sempre inclua `schema_version: "2.0"`.
+7. Sempre inclua `schema_version` (`"2.0"` ou `"2.1"`; a 2.1 só depois do LexLearn — §4).
 8. Mensagens persistentes (`delivery_mode=2`).
 9. **Pasta plana:** nunca crie subpastas dentro de `{concurso}/`.
 10. **Escreva apenas em `exams/`.** Nunca em `laws/`, nunca no banco.
 11. Ao sair o definitivo: publique `concurso.atualizado`, adicione o definitivo e marque o
     preliminar com `vigente: false` + `substituido_por`.
+12. **Só questões objetivas.** O LexLearn trata questões Certo/Errado (Cebraspe) e de
+    múltipla escolha (A–E), casando cada prova com o seu gabarito. Material discursivo
+    não é entregue: prova discursiva, padrão de resposta, estudo de caso, redação, peça
+    e as justificativas de alteração de gabarito. Um caderno "objetiva e discursiva"
+    no mesmo PDF é entregue (tem as objetivas). Sem mudança de schema.
 
 ---
 
@@ -209,14 +266,15 @@ Ambos ficam na mesma pasta. "Histórico" é uma propriedade (`vigente: false`), 
 ## 8. Checklist de conformidade
 
 - [ ] Escreve em `exams/{banca}/{concurso}/` — **pasta plana, sem subpastas**
-- [ ] Um `.meta.json` por PDF, conforme `schema/sidecar.schema.json` (v2.0)
+- [ ] Um `.meta.json` por PDF, conforme `schema/sidecar.schema.json` (v2.1)
 - [ ] `cargos` sempre como lista; `["*"]` para todos
 - [ ] `banca`/`concurso`/`cargos` como slugs; rótulo cru em `extra.rotulos` (recomendado)
 - [ ] `nome`/`arquivo` = basename puro, sem barra (`^[^/]+$`)
 - [ ] `tipo_prova` quando a banca embaralha; `null` caso contrário
 - [ ] `multi_cargo: true` + `cargos` completo para gabarito subdividido; `segmentos` se der
 - [ ] Ciclo de vida: `vigente` correto; preliminar arquivado com `substituido_por`
-- [ ] Escrita atômica, checksum SHA-256, `event_id` UUID, `schema_version: "2.0"`
+- [ ] `caderno` só quando lido do PDF ou declarado — nunca derivado do nome (v2.1)
+- [ ] Escrita atômica, checksum SHA-256, `event_id` UUID, `schema_version` (2.0 | 2.1)
 - [ ] `pasta_uri` com esquema; mensagens persistentes
 - [ ] Nunca escreve fora de `exams/`; nunca toca o banco
 

@@ -1,0 +1,60 @@
+# politica_coleta.yaml — a política da coleta automática (ADR-0007)
+#
+# O consumidor do LexPubli NÃO pede aprovação caso a caso: ele aplica esta
+# política. O que ela não resolve vai para o operador (evento
+# document.acquisition.awaiting_operator). Mudar a política = commit aqui.
+#
+# Na dúvida, aperte: mandar caso demais ao operador custa tempo; coletar
+# certame errado polui o acervo do LexLearn.
+
+version: 1
+
+# Bancas com spider VALIDADO em crawl real, conferido pelo operador.
+# Uma banca só entra aqui depois disso.
+#   fcc: FORA por ora. O spider só funciona com ROBOTSTXT_OBEY=False, e o
+#        ADR-0007 manda respeitar o robots.txt na coleta automática. Os
+#        alvos FCC continuam no watchlist.yaml manual, sob decisão do operador.
+bancas_validadas: [cebraspe, fgv, cesgranrio]
+
+# Concurso ANUNCIADO (relation=current): a frequência segue a fase.
+cron_por_status:
+  previsto: "0 7 * * 1"                # 1x/semana
+  autorizado: "0 7 * * 1"
+  edital_aberto: "0 7 * * *"           # 1x/dia até a prova
+  inscricoes_encerradas: "0 7 * * *"
+  prova_realizada: "0 */6 * * *"       # 4x/dia: ciclo preliminar → definitivo
+  resultado: "0 6 * * *"
+  encerrado: "30 6 * * 1"
+
+# Certames ANTERIORES (relation=previous): o buscador do ADR-0006 propõe,
+# esta política filtra.
+anteriores:
+  ativo: true
+  max_certames: 3                       # por concurso anunciado
+  exige_confirmacao_orgao: true         # visto no catálogo do órgão (índice PCI)
+  score_minimo: 4                       # 4 = órgão e banca citados juntos
+  cron: "30 6 * * 1"                    # ciclo encerrado: 1x/semana basta
+
+# Concursos já no ACERVO (ADR-0008), da mesma banca e da mesma carreira do
+# concurso anunciado. Mesmo órgão e ano anterior -> previous; outro órgão ->
+# related. Resposta na hora, sem coleta nova. Só a MESMA banca: o DNA do
+# LexLearn é por banca. A carreira vem da curadoria do LexPubli (career) e,
+# no acervo antigo, da marcação do operador:
+#   python -m lexcorpus.catalogo carreira --concurso sefaz_ce_21 --carreira fiscal ...
+relacionados:
+  ativo: true
+  max_por_alvo: 5                       # related por concurso anunciado, mais recentes primeiro
+
+# VARREDURA por carreira (ADR-0009): o acervo cresce antes do anúncio. A
+# carreira é o eixo da busca; a coleta é dos spiders de banca. A regra só
+# sugere (carreiras_regras.yaml); o operador confirma em lote:
+#   python -m lexcorpus.varredura revisar --carreira fiscal
+# O teto protege o LexLearn: tudo o que é coletado entra lá pelo v2.1.
+varredura:
+  ativo: true
+  carreiras: [fiscal, tribunais]
+  max_por_carreira_e_banca: 5           # os mais recentes primeiro
+  cron: "45 5 * * 2"                    # recoleta semanal de cada alvo já liberado
+  novos_por_semana: 2                   # concursos NOVOS liberados por semana: o ritmo
+                                        # de entrada no LexLearn (cada confirmado ganha
+                                        # uma data a_partir_de escalonada)

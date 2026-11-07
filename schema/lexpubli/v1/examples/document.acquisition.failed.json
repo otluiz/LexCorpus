@@ -1,0 +1,17 @@
+{
+  "event_id": "01a1330a-3e4d-7f50-8b62-7c8d9e0f1a2b",
+  "event_type": "document.acquisition.failed",
+  "event_version": "1.0",
+  "occurred_at": "2026-10-13T09:20:41.913Z",
+  "producer": "lexcorpus/consumidor",
+  "correlation_id": "01a132f0-d60d-71bc-bfbc-021403fdbc57",
+  "data": {
+    "contest_id": "01a132f0-8537-7fdb-bd15-c39aa6c10f7e",
+    "relation": "current",
+    "reason": "no_documents",
+    "retryable": true,
+    "exam_board": { "slug": "cebraspe" },
+    "lexcorpus_contest": "sefaz_al_26",
+    "detail": "Evento existe na API da Cebraspe, mas a prova ainda não foi aplicada."
+  }
+}

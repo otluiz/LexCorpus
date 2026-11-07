@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lex/lexpubli/events/v1/contest.discovery.updated.schema.json",
+  "title": "contest.discovery.updated - v1.0",
+  "description": "A curadoria do LexPubli mudou um concurso que já foi anunciado (contest.discovery.created). Carrega o concurso INTEIRO, como está agora (não só a diferença), e em 'changed' os campos que mudaram desde o último anúncio. Ex.: a banca ou a data da prova saíram depois do edital; a carreira foi definida; o status avançou. Consumidor previsto: LexCorpus. Emitido em lexpubli.events.",
+  "allOf": [
+    {
+      "$ref": "https://lex/lexpubli/events/v1/envelope.schema.json"
+    },
+    {
+      "properties": {
+        "event_type": {
+          "const": "contest.discovery.updated"
+        },
+        "event_version": {
+          "pattern": "^1\\.[0-9]+$"
+        },
+        "data": {
+          "$ref": "#/$defs/data"
+        },
+        "producer": {
+          "pattern": "^lexpubli(/[a-z0-9_.-]+)?$"
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "data": {
+      "allOf": [
+        {
+          "$ref": "https://lex/lexpubli/events/v1/common.schema.json#/$defs/contest"
+        }
+      ],
+      "type": "object",
+      "required": [
+        "changed"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "contest_id": true,
+        "contest_slug": true,
+        "title": true,
+        "organ": true,
+        "exam_board": true,
+        "year": true,
+        "status": true,
+        "career": true,
+        "exam_date": true,
+        "positions": true,
+        "registration": true,
+        "edital_url": true,
+        "page_url": true,
+        "source_url": true,
+        "changed": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "title",
+              "organ",
+              "exam_board",
+              "year",
+              "status",
+              "career",
+              "exam_date",
+              "positions",
+              "registration",
+              "edital_url",
+              "contest_slug"
+            ]
+          },
+          "description": "Campos que mudaram desde o último anúncio deste contest_id."
+        }
+      }
+    }
+  }
+}
