@@ -59,6 +59,26 @@
     cache. Política de expurgo, se um dia existir, será objeto de estudo.
 
 * Em andamento / próximos
+** TODO [#B] Link do edital anterior para o LexPubli :ALINHAR_LexPubli:
+   Pedido do LexPubli em 27/11: ADR-0014 D2 (revisado), a serviço do
+   ADR-0015 (LexStudy como vitrine antes do edital). AGUARDA O ACEITE.
+   Quando coletar um certame anterior (`relation: previous`), o LexCorpus já
+   está na página onde fica o edital de abertura. O pedido é informar o LINK
+   oficial desse edital no `document.acquisition.completed`, num campo
+   opcional novo, `previous_edital_url`.
+   - NÃO baixa o PDF. O `RE_DESCARTAR` do heuristics.py continua como está.
+     Quem confere e grava o edital em /data/raw/editais/ é o curador do
+     LexPubli (ADR-0003 de lá). Nada muda no v2.1 com o LexLearn.
+   - Contrato v1.1, CONSUMIDOR PRIMEIRO: `files` e `data` têm
+     additionalProperties:false, então o LexPubli aceita o campo no schema
+     antes, e a cópia em schema/lexpubli/v1/ acompanha. Só depois o
+     respostas.py passa a enviá-lo.
+   - Só URI oficial (banca ou órgão), nunca agregador.
+   - [ ] Aceite do pedido (dono do produto / parceiro do LexCorpus)
+   - [ ] Schema v1.1 copiado do LexPubli para schema/lexpubli/v1/
+   - [ ] Spiders guardam o link do edital de abertura do certame anterior
+   - [ ] respostas.py envia `previous_edital_url` (só com relation: previous)
+
 ** TODO [#A] ADR-0009: varredura por carreira (fonte 2 do related)
    ACEITO em 13/10. Decidido pelo dono do produto: começar por fiscal e
    tribunais, até 5 concursos por carreira e banca. A carreira é o eixo da
