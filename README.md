@@ -7,6 +7,11 @@ inteligência de domínio (parsing, normalização, classificação) é do LexLe
 O acordo entre os dois sistemas está em `docs/CONTRATO.md` (v2.0). Os formatos de
 mensagem estão em `schema/evento.schema.json` e `schema/sidecar.schema.json`.
 
+> 🗺️ **Suíte Lex:** o mapa estrutural dos três projetos (fronteiras, contratos,
+> brokers, storage, máquinas) está em
+> [`../ARQUITETURA-DA-SUITE.md`](../ARQUITETURA-DA-SUITE.md), fora deste
+> repositório. Leia antes de qualquer mudança estrutural.
+
 ## Estrutura
 
     lexcorpus/
